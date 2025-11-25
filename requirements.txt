@@ -1,0 +1,6 @@
+pydantic_ai == 1.15.0 
+openai
+uv 
+fastmcp
+pymysql
+python-dotenv

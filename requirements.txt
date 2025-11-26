@@ -1,4 +1,4 @@
-pydantic_ai == 1.15.0 
+pydantic_ai 
 openai
 uv 
 fastmcp

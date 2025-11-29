@@ -220,11 +220,15 @@ async def initialize_agents():
         logger.error(f"Error fetching schema: {e}", exc_info=True)
 
     # Update SQL agent prompt
-    sql_agent.system_prompt = f"""You control the Salesforce MySQL database. Guidelines:
-1. Use SELECT unless asked to modify data.
-2. Proper SQL syntax only.
-3. JOIN as needed, add WHERE and LIMIT clauses.
-4. Return meaningful column names.
+    sql_agent.system_prompt = f"""You are an expert SQL query generator. Your task is to convert natural language questions into valid SQL queries.
+
+IMPORTANT GUIDELINES:
+1. Generate only SELECT queries unless explicitly asked to modify data
+2. Always use proper SQL syntax
+3. Use appropriate JOINs when multiple tables are involved
+4. Add WHERE clauses for filtering when relevant
+5. Use LIMIT clauses to prevent overwhelming results (default LIMIT 100 unless specified)
+6. Return column names that are meaningful
 
 DB SCHEMA:
 {formatted_schema}

@@ -23,14 +23,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/documents'
 ]
 
-# Regex patterns to identify structured Drive queries
-DRIVE_QUERY_PATTERNS = [
-    re.compile(r"name\s+contains\s+['\"]", re.IGNORECASE),
-    re.compile(r"fullText\s+contains\s+['\"]", re.IGNORECASE),
-    re.compile(r"mimeType\s*=", re.IGNORECASE),
-    re.compile(r"modifiedTime\s*[><=]", re.IGNORECASE),
-    re.compile(r"['\"]\s+in\s+parents", re.IGNORECASE),
-]
+
 
 mcp = FastMCP("Google Drive Server")
 
@@ -243,7 +236,8 @@ async def search_files(
     Searches for files and folders within a user's Google Drive, including shared drives.
 
     Args:
-        query (str): The search query string. Supports Google Drive search operators.
+        query (str): The search query. Can be a structured Drive query (e.g., "name contains 'report'") 
+                     or a simple natural language search (e.g., "project plan").
         max_results (int): The maximum number of files to return. Defaults to 10.
         drive_id (Optional[str]): ID of the shared drive to search. If None, behavior depends on `corpora` and `include_items_from_all_drives`.
         include_items_from_all_drives (bool): Whether shared drive items should be included in results. Defaults to True.
@@ -252,28 +246,29 @@ async def search_files(
     try:
         service = get_drive_service()
         
-        # Check if the query looks like a structured Drive query or free text
-        is_structured_query = any(pattern.search(query) for pattern in DRIVE_QUERY_PATTERNS)
+        # Helper to execute search
+        async def execute_search(q_str):
+            list_params = build_drive_list_params(
+                query=q_str,
+                page_size=max_results,
+                drive_id=drive_id,
+                include_items_from_all_drives=include_items_from_all_drives,
+                corpora=corpora,
+            )
+            return await asyncio.to_thread(service.files().list(**list_params).execute)
 
-        if is_structured_query:
-            final_query = query
-        else:
-            # For free text queries, wrap in fullText contains or name contains
+        try:
+            # 1. Try query as-is (plus trashed filter)
+            # This handles valid Drive syntax queries like "name = 'foo'"
+            final_query = f"({query}) and trashed=false"
+            results = await execute_search(final_query)
+        except Exception:
+            # 2. Fallback: Treat as free text search
+            # Escape single quotes to prevent syntax errors
             escaped_query = query.replace("'", "\\'")
             # Broader search: name or content
             final_query = f"(name contains '{escaped_query}' or fullText contains '{escaped_query}') and trashed=false"
-
-        list_params = build_drive_list_params(
-            query=final_query,
-            page_size=max_results,
-            drive_id=drive_id,
-            include_items_from_all_drives=include_items_from_all_drives,
-            corpora=corpora,
-        )
-
-        results = await asyncio.to_thread(
-            service.files().list(**list_params).execute
-        )
+            results = await execute_search(final_query)
         
         files = results.get('files', [])
         

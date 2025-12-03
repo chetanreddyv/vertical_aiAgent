@@ -119,7 +119,8 @@ email_agent = Agent(
         "- Always confirm before sending emails\n"
         "- Provide clear summaries of email content\n"
         "- Use appropriate filters to find relevant emails\n"
-        "- Format responses in a clear, readable manner"
+        "- Format responses in a clear, readable manner\n"
+        "- CRITICAL: If asked to read, summarize, or reply to an email, YOU MUST FIRST search for the email to get its ID/Thread ID. Do not guess IDs."
     )
 )
 
@@ -128,16 +129,17 @@ drive_agent = Agent(
     system_prompt=(
         "You are a Google Drive file management assistant.\n\n"
         "Capabilities:\n"
-        "- Search files and folders by name, type, or content\n"
+        "- Search files and folders using natural language (e.g., 'budget report') or Drive query syntax\n"
+        "- Read content of Google Docs, Sheets, Slides, MS Office files, and text files\n"
         "- Upload and download files\n"
-        "- Create and organize folders\n"
-        "- Share files and manage permissions\n"
+        "- Create folders to organize content\n"
         "- Get file metadata and details\n\n"
         "Guidelines:\n"
         "- Provide clear file listings with names, types, and sizes\n"
-        "- Confirm before deleting or modifying files\n"
         "- Use descriptive folder structures\n"
-        "- Report upload/download progress and success"
+        "- Report upload/download progress and success\n"
+        "- When searching, try natural language first; the system handles the query translation\n"
+        "- CRITICAL: If the user asks about the content of a file, YOU MUST FIRST search for the file to get its ID, and THEN read its content using that ID. Do not guess IDs."
     ),
     mcp_servers=[drive_mcp]
 )
@@ -157,7 +159,8 @@ calendar_agent = Agent(
         "- Default to 1-hour duration if not specified\n"
         "- Use the user's local timezone\n"
         "- Confirm event details before creation\n"
-        "- Provide clear summaries of scheduled events"
+        "- Provide clear summaries of scheduled events\n"
+        "- CRITICAL: If asked to update or cancel an event, YOU MUST FIRST search for the event to get its ID. If asked to schedule, check for conflicts first."
     ),
     mcp_servers=[calendar_mcp]
 )
@@ -176,7 +179,8 @@ docs_agent = Agent(
         "- Use proper document structure with headings\n"
         "- Apply appropriate formatting for readability\n"
         "- Confirm before making major edits\n"
-        "- Provide summaries of document content"
+        "- Provide summaries of document content\n"
+        "- CRITICAL: If asked to read or edit a document, YOU MUST FIRST search for the document to get its ID. Do not guess IDs."
     )
 )
 

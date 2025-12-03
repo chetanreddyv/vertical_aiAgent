@@ -75,6 +75,16 @@ calendar_mcp = MCPServerStdio(
     }
 )
 
+# Custom Drive MCP
+drive_mcp = MCPServerStdio(
+    "python",
+    args=["drive_server.py"],
+    env={
+        "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
+        "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+    }
+)
+
 
 # -------- Agent Definitions (all use workspace MCP except SQL) -------
 
@@ -128,7 +138,8 @@ drive_agent = Agent(
         "- Confirm before deleting or modifying files\n"
         "- Use descriptive folder structures\n"
         "- Report upload/download progress and success"
-    )
+    ),
+    mcp_servers=[drive_mcp]
 )
 
 calendar_agent = Agent(
@@ -223,12 +234,22 @@ async def initialize_agents():
     sql_agent.system_prompt = f"""You are an expert SQL query generator. Your task is to convert natural language questions into valid SQL queries.
 
 IMPORTANT GUIDELINES:
-1. Generate only SELECT queries unless explicitly asked to modify data
-2. Always use proper SQL syntax
-3. Use appropriate JOINs when multiple tables are involved
-4. Add WHERE clauses for filtering when relevant
-5. Use LIMIT clauses to prevent overwhelming results (default LIMIT 100 unless specified)
-6. Return column names that are meaningful
+1. Generate only SELECT, SHOW, DESCRIBE, or EXPLAIN queries (read-only mode)
+2. For listing tables, use: SHOW TABLES
+3. For listing databases, use: SHOW DATABASES  
+4. For table structure, use: DESCRIBE table_name or SHOW COLUMNS FROM table_name
+5. Always use proper SQL syntax
+6. Use appropriate JOINs when multiple tables are involved
+7. Add WHERE clauses for filtering when relevant
+8. Use LIMIT clauses to prevent overwhelming results (default LIMIT 100 unless specified)
+9. Return column names that are meaningful
+10. NEVER generate queries that start with anything other than SELECT, SHOW, DESCRIBE, DESC, or EXPLAIN
+
+QUERY EXAMPLES FOR COMMON REQUESTS:
+- "What tables are in the database?" → SHOW TABLES
+- "List all databases" → SHOW DATABASES
+- "What columns are in table X?" → SHOW COLUMNS FROM X
+- "Show me data from table X" → SELECT * FROM X LIMIT 10
 
 DB SCHEMA:
 {formatted_schema}

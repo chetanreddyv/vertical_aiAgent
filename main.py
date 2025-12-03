@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 import agents
 from agents import (
     intent_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    docs_agent, general_agent, mysql_mcp, calendar_mcp,
+    docs_agent, general_agent, mysql_mcp, calendar_mcp, drive_mcp,
     IntentType
 )
 from utils import format_query_results, get_temporal_context
@@ -50,7 +50,8 @@ async def lifespan(app: FastAPI):
     async with (
         email_agent.run_mcp_servers(),
         sql_agent.run_mcp_servers(),
-        calendar_agent.run_mcp_servers()
+        calendar_agent.run_mcp_servers(),
+        drive_agent.run_mcp_servers()
     ):
         # Initialize agents (load schema, set prompts)
         try:
@@ -148,10 +149,13 @@ async def process_query(request: QueryRequest):
             sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
             agent_histories["sql"] = sql_result.new_messages()
             
-            # Execute the generated query
+            # Get the generated query and explanation
             query = sql_result.output.sqlquery
             explanation = sql_result.output.explanation or "No explanation provided"
             
+            # Show SQL query immediately (before execution)
+            status_updates.append(f"📝 {explanation}")
+            status_updates.append(f"🔍 Generated Query: {query}")
             status_updates.append("Executing database query...")
             query_result = await mysql_mcp.direct_call_tool(
                 name="execute_query",
@@ -284,10 +288,12 @@ async def query_stream_generator(query: str):
             sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
             agent_histories["sql"] = sql_result.new_messages()
             
-            # Execute the generated query
+            # Get the generated query and explanation
             query = sql_result.output.sqlquery
             explanation = sql_result.output.explanation or "No explanation provided"
             
+            # Show SQL query immediately (before execution) with special type
+            yield f"data: {json.dumps({'type': 'sql_query', 'query': query, 'explanation': explanation})}\n\n"
             yield f"data: {json.dumps({'type': 'status', 'content': 'Executing database query...'})}\n\n"
             query_result = await mysql_mcp.direct_call_tool(
                 name="execute_query",
@@ -419,7 +425,8 @@ async def health_check():
         },
         "mcp_servers": {
             "mysql": "connected",
-            "calendar": "connected"
+            "calendar": "connected",
+            "drive": "connected"
         },
         "schema_loaded": formatted_schema != "Schema unavailable."
     }

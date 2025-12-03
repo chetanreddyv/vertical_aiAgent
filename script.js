@@ -130,6 +130,33 @@ class ChatApp {
                     statusList.appendChild(statusItem);
                     this.scrollToBottom();
 
+                } else if (data.type === 'sql_query') {
+                    // Show SQL query immediately with special formatting
+                    this.removeTypingIndicator(typingId);
+                    statusEl.style.display = 'flex';
+
+                    // Add explanation
+                    const explanationItem = document.createElement('div');
+                    explanationItem.className = 'status-item';
+                    explanationItem.innerHTML = `
+                        <span class="status-dot"></span>
+                        <span class="status-text">📝 ${this.escapeHtml(data.explanation)}</span>
+                    `;
+                    statusList.appendChild(explanationItem);
+
+                    // Add SQL query with code formatting
+                    const queryItem = document.createElement('div');
+                    queryItem.className = 'status-item sql-query-item';
+                    queryItem.innerHTML = `
+                        <span class="status-dot"></span>
+                        <div class="status-text">
+                            <strong>🔍 Generated Query:</strong>
+                            <pre class="sql-query-code"><code>${this.escapeHtml(data.query)}</code></pre>
+                        </div>
+                    `;
+                    statusList.appendChild(queryItem);
+                    this.scrollToBottom();
+
                 } else if (data.type === 'result') {
                     // Handle final result
                     eventSource.close();
@@ -365,14 +392,14 @@ class ChatApp {
                     <h2>Welcome to AI Agent Assistant</h2>
                     <p>I can help you with email, database queries, file management, calendar scheduling, and more.</p>
                     <div class="suggestions">
-                        <button class="suggestion-chip" data-query="Show me all tables in the Salesforce database">
-                            🗄️ Show database tables
+                        <button class="suggestion-chip" data-query="List my Google Drive files">
+                            📁 List Drive files
                         </button>
-                        <button class="suggestion-chip" data-query="Create a calendar event for tomorrow at 2pm">
-                            📅 Schedule meeting
+                        <button class="suggestion-chip" data-query="Upload a file to Google Drive">
+                            📤 Upload to Drive
                         </button>
-                        <button class="suggestion-chip" data-query="Check my latest 5 emails">
-                            📧 Check emails
+                        <button class="suggestion-chip" data-query="Create a folder in Google Drive">
+                            📂 Create Drive folder
                         </button>
                     </div>
                 </div>

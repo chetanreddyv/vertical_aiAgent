@@ -670,7 +670,9 @@ body {
     .sql-table td {
         padding: 0.5rem;
     }
-}/* Status Message Styles */
+}
+
+/* Status Message Styles */
 .status-message .message-content {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
     border: 1px solid rgba(99, 102, 241, 0.3);
@@ -728,4 +730,35 @@ body {
     color: var(--text-secondary);
     font-size: 0.9rem;
     font-weight: 500;
+}
+
+/* SQL Query Display in Status */
+.sql-query-item .status-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.sql-query-code {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    margin: 0.25rem 0 0 0;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+.sql-query-code code {
+    color: var(--accent-primary);
+    background: transparent;
+    padding: 0;
+    font-weight: 500;
+}
+
+.status-item strong {
+    color: var(--text-primary);
+    font-weight: 600;
 }

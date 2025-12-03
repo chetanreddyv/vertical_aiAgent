@@ -12,7 +12,12 @@ import os
 load_dotenv()
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+# Using unified scopes for all Google services (managed by auth_google.py)
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/documents'
+]
 
 mcp = FastMCP("Google Calendar Server")
 
@@ -27,7 +32,7 @@ def get_calendar_service():
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
     else:
         raise Exception(
-            "No authentication found. Please run 'python auth_calendar.py' first to authenticate."
+            "No authentication found. Please run 'python auth_google.py' first to authenticate."
         )
     
     # If credentials expired, try to refresh
@@ -39,7 +44,7 @@ def get_calendar_service():
                 token.write(creds.to_json())
         else:
             raise Exception(
-                "Authentication expired. Please run 'python auth_calendar.py' again."
+                "Authentication expired. Please run 'python auth_google.py' again."
             )
 
     service = build('calendar', 'v3', credentials=creds)

@@ -262,13 +262,33 @@ async def search_files(
             # This handles valid Drive syntax queries like "name = 'foo'"
             final_query = f"({query}) and trashed=false"
             results = await execute_search(final_query)
+            
+            # If no files found with strict query, raise exception to trigger fallback
+            # UNLESS the query was already very broad (heuristic check?)
+            # For now, let's assume if strict query returns nothing, we should try broad search
+            if not results.get('files'):
+                raise ValueError("No results with strict query")
+                
         except Exception:
-            # 2. Fallback: Treat as free text search
-            # Escape single quotes to prevent syntax errors
-            escaped_query = query.replace("'", "\\'")
-            # Broader search: name or content
-            final_query = f"(name contains '{escaped_query}' or fullText contains '{escaped_query}') and trashed=false"
-            results = await execute_search(final_query)
+            # 2. Fallback: Treat as free text search with multi-term support
+            # Split query into terms and escape each
+            terms = query.split()
+            stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'or', 'with'}
+            and_clauses = []
+            for term in terms:
+                # Remove quotes if present to avoid syntax errors in the constructed query
+                clean_term = term.replace("'", "\\'").replace('"', '\\"')
+                if clean_term and clean_term.lower() not in stop_words:
+                    and_clauses.append(f"(name contains '{clean_term}' or fullText contains '{clean_term}')")
+            
+            if and_clauses:
+                final_query = f"{' and '.join(and_clauses)} and trashed=false"
+                results = await execute_search(final_query)
+            else:
+                # If all terms were stop words or empty, fallback to original behavior (or just search for the raw query escaped)
+                escaped_query = query.replace("'", "\\'")
+                final_query = f"(name contains '{escaped_query}' or fullText contains '{escaped_query}') and trashed=false"
+                results = await execute_search(final_query)
         
         files = results.get('files', [])
         

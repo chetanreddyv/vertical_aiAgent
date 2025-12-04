@@ -32,11 +32,11 @@ class IntentType(str, Enum):
     DRIVE_ONLY = "drive_only"
     CALENDAR_ONLY = "calendar_only"
     DOCS_ONLY = "docs_only"
-    MULTI_WORKSPACE = "multi_workspace"
     GENERAL = "general"
 
 class ExecutionPlan(BaseModel):
     intent: IntentType
+    rewritten_query: str = Field(..., description="Rewritten user query that is specific, actionable, and context-rich.")
     email_task: Optional[str]
     sql_task: Optional[str]
     drive_task: Optional[str] = None
@@ -92,7 +92,8 @@ intent_agent = Agent(
     "openai:gpt-4o-mini",
     output_type=ExecutionPlan,
     system_prompt=(
-        "You are an intent classification expert. Analyze the user's request and determine the primary action they want to perform.\n\n"
+        "You are an intent classification and query refinement expert. Your goal is to understand the user's request, "
+        "classify it into the correct intent, and rewrite the query to be precise and actionable for the specific agent.\n\n"
         "Classification Options:\n"
         "- 'email_only': Gmail operations (send, read, search emails)\n"
         "- 'sql_only': Database queries or data retrieval from MySQL\n"
@@ -100,9 +101,15 @@ intent_agent = Agent(
         "- 'drive_only': Google Drive operations (upload, download, search files)\n"
         "- 'calendar_only': Google Calendar operations (create events, check schedule)\n"
         "- 'docs_only': Google Docs operations (create, edit documents)\n"
-        "- 'multi_workspace': Multiple Google Workspace services needed\n"
         "- 'general': General questions or conversations not requiring tools\n\n"
-        "For each classification, extract and rephrase the specific task in clear, actionable language."
+        "Instructions:\n"
+        "1. Analyze the user's input to determine the primary intent.\n"
+        "2. Rewrite the user's query in the 'rewritten_query' field. This should be a clear, third-person statement of what the user wants (e.g., 'Search for the budget file in Drive' instead of 'find the budget file').\n"
+        "3. Populate the specific task field corresponding to the chosen intent (e.g., 'email_task' for 'email_only').\n"
+        "   - The task description in the specific field should be DETAILED and SELF-CONTAINED. \n"
+        "   - Include all necessary context, parameters, and constraints.\n"
+        "   - For 'email_and_sql', populate BOTH 'sql_task' and 'email_task'.\n"
+        "   - Leave unrelated task fields null."
     )
 )
 

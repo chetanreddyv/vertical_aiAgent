@@ -128,6 +128,18 @@ class ChatApp {
                         <span class="status-text">${data.content}</span>
                     `;
                     statusList.appendChild(statusItem);
+                    statusList.appendChild(statusItem);
+                    this.scrollToBottom();
+
+                } else if (data.type === 'rewritten_query') {
+                    // Show rewritten query
+                    const statusItem = document.createElement('div');
+                    statusItem.className = 'status-item rewritten-query';
+                    statusItem.innerHTML = `
+                        <span class="status-dot" style="background: var(--accent);"></span>
+                        <span class="status-text">User wants to "<strong>${data.content}</strong>"</span>
+                    `;
+                    statusList.appendChild(statusItem);
                     this.scrollToBottom();
 
                 } else if (data.type === 'sql_query') {

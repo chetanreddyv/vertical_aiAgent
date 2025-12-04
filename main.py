@@ -273,6 +273,9 @@ async def query_stream_generator(query: str):
         intent_display = plan.intent.value.replace("_", " ").title()
         yield f"data: {json.dumps({'type': 'status', 'content': f'Detected intent: {intent_display}'})}\n\n"
         
+        # Stream the rewritten query
+        yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_query})}\n\n"
+        
         # Execute appropriate agent workflow
         agent_result = None
         sql_data = None

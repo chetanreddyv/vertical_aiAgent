@@ -4,3 +4,12 @@ uv
 fastmcp
 pymysql
 python-dotenv
+fastapi
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+uvicorn
+psycopg2-binary
+pgvector
+numpy

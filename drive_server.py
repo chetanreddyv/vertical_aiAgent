@@ -230,7 +230,7 @@ async def search_files(
     max_results: int = 10,
     drive_id: Optional[str] = None,
     include_items_from_all_drives: bool = True,
-    corpora: Optional[str] = None,
+    corpora: str = "allDrives",
 ) -> str:
     """
     Searches for files and folders within a user's Google Drive, including shared drives.

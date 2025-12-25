@@ -17,7 +17,8 @@ load_dotenv()
 required_vars = [
     "EMAIL_PASSWORD", "EMAIL_ADDRESS", "DB_HOST", "DB_USER", 
     "DB_PASSWORD", "OPENAI_API_KEY", 
-    "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"
+    "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
+    "TLDV_API_KEY"
 ]
 for var in required_vars:
     if not os.getenv(var):
@@ -32,6 +33,7 @@ class IntentType(str, Enum):
     DRIVE_ONLY = "drive_only"
     CALENDAR_ONLY = "calendar_only"
     DOCS_ONLY = "docs_only"
+    TLDV_ONLY = "tldv_only"
     GENERAL = "general"
 
 class ExecutionPlan(BaseModel):
@@ -42,6 +44,7 @@ class ExecutionPlan(BaseModel):
     drive_task: Optional[str] = None
     calendar_task: Optional[str] = None
     docs_task: Optional[str] = None
+    tldv_task: Optional[str] = None
 
 class sql(BaseModel):
     sqlquery: str = Field(..., description="The SQL query to execute.")
@@ -51,7 +54,7 @@ class sql(BaseModel):
 
 # MySQL (unchanged)
 mysql_mcp = MCPServerStdio(
-    "python",
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
     args=["sql_server.py"],
     env={
         "DB_HOST": os.getenv("DB_HOST"),
@@ -67,7 +70,7 @@ mysql_mcp = MCPServerStdio(
 
 # Custom Calendar MCP
 calendar_mcp = MCPServerStdio(
-    "python",
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
     args=["calendar_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -77,11 +80,44 @@ calendar_mcp = MCPServerStdio(
 
 # Custom Drive MCP
 drive_mcp = MCPServerStdio(
-    "python",
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
     args=["drive_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
         "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+    }
+)
+
+
+# TLDV MCP (Docker)
+tldv_mcp = MCPServerStdio(
+    "docker",
+    args=[
+        "run",
+        "-i", 
+        "--init", 
+        "--rm", 
+        "-e", 
+        f"TLDV_API_KEY={os.getenv('TLDV_API_KEY')}", 
+        "tldv-mcp-server"
+    ]
+)
+
+
+# RAG MCP (Postgres Vector)
+rag_mcp = MCPServerStdio(
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    args=["rag_server.py"],
+    env={
+        "PG_HOST": os.getenv("PG_HOST", "localhost"),
+        "PG_PORT": os.getenv("PG_PORT", "5435"),
+        "PG_USER": os.getenv("PG_USER", "admin"),
+        "PG_PASSWORD": os.getenv("PG_PASSWORD", "password"),
+        "PG_DB": os.getenv("PG_DB", "vectordb"),
+        "PG_SCHEMA": os.getenv("PG_SCHEMA", "app_data"),
+        "PG_TABLE_NAME": os.getenv("PG_TABLE_NAME", "meeting_embeddings"),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+        "OPENAI_MODEL": os.getenv("OPENAI_MODEL", "text-embedding-3-small"),
     }
 )
 
@@ -99,8 +135,9 @@ intent_agent = Agent(
         "- 'sql_only': Database queries or data retrieval from MySQL\n"
         "- 'email_and_sql': Combined workflow (query database, then email results)\n"
         "- 'drive_only': Google Drive operations (upload, download, search files)\n"
-        "- 'calendar_only': Google Calendar operations (create events, check schedule)\n"
+        "- 'calendar_only': Google Calendar: Schedule/Create/Update events & Google Meet links\n"
         "- 'docs_only': Google Docs operations (create, edit documents)\n"
+        "- 'tldv_only': TLDV: Retrieve transcripts, summaries, and highlights from PAST meetings\n"
         "- 'general': General questions or conversations not requiring tools\n\n"
         "Instructions:\n"
         "1. Analyze the user's input to determine the primary intent.\n"
@@ -154,9 +191,10 @@ drive_agent = Agent(
 calendar_agent = Agent(
     "openai:gpt-4o-mini",
     system_prompt=(
-        "You are a Google Calendar scheduling assistant.\n\n"
+        "You are a Google Calendar and video meeting scheduling assistant.\n\n"
         "Capabilities:\n"
         "- Create calendar events with dates, times, and descriptions\n"
+        "- Create Google Meet video conferences (calendar events with video links)\n"
         "- Search for existing events\n"
         "- Update or cancel events\n"
         "- Check availability and find free time slots\n"
@@ -165,9 +203,11 @@ calendar_agent = Agent(
         "- Parse natural language dates and times accurately\n"
         "- Default to 1-hour duration if not specified\n"
         "- Use the user's local timezone\n"
+        "- For video meetings, use the create_meeting tool which generates Meet links\n"
+        "- For regular events without video, use the create_event tool\n"
         "- Confirm event details before creation\n"
         "- Provide clear summaries of scheduled events\n"
-        "- CRITICAL: If asked to update or cancel an event, YOU MUST FIRST search for the event to get its ID. If asked to schedule, check for conflicts first."
+        "- CRITICAL: If asked to update or cancel an event, YOU MUST FIRST search for the event to get its ID. If asked to schedule, check for conflicts first.\n"
     ),
     mcp_servers=[calendar_mcp]
 )
@@ -189,6 +229,22 @@ docs_agent = Agent(
         "- Provide summaries of document content\n"
         "- CRITICAL: If asked to read or edit a document, YOU MUST FIRST search for the document to get its ID. Do not guess IDs."
     )
+)
+
+tldv_agent = Agent(
+    "openai:gpt-4o-mini",
+    system_prompt=(
+        "You are a TLDV Meeting Notetaker assistant.\n\n"
+        "Capabilities:\n"
+        "- Search across all past meeting transcripts for specific topics, context, and decisions (RAG).\n\n"
+        "Guidelines:\n"
+        "- You have access to a semantic search tool 'search_meetings'.\n"
+        "- ALWAYS use 'search_meetings' to find information about past meetings.\n"
+        "- The search results include meeting content, metadata (speakers, time), and a 'meeting_id'.\n"
+        "- Use the metadata to provide context (e.g., 'In the meeting on [date]...').\n"
+        "- This tool is NOT for scheduling new meetings (use Calendar agent for that).\n"
+    ),
+    mcp_servers=[rag_mcp]
 )
 
 sql_agent = Agent(

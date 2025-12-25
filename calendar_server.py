@@ -1,12 +1,14 @@
 from fastmcp import FastMCP
 import os.path
 import datetime
+import uuid
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import os
+from typing import List
 
 # Load environment variables
 load_dotenv()
@@ -109,6 +111,52 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
         return f"Event created: {event.get('htmlLink')}"
     except Exception as e:
         return f"Error creating event: {str(e)}"
+
+@mcp.tool()
+def create_meeting(summary: str, start_time: str, end_time: str, attendees: List[str] = [], description: str = "") -> str:
+    """Create a new Google Meet video conference.
+    
+    Args:
+        summary: Title of the meeting
+        start_time: Start time in ISO format (e.g., '2023-10-27T10:00:00')
+        end_time: End time in ISO format
+        attendees: List of email addresses to invite
+        description: Optional description of the meeting
+    """
+    try:
+        service = get_calendar_service()
+        
+        event = {
+            'summary': summary,
+            'description': description,
+            'start': {
+                'dateTime': start_time,
+                'timeZone': 'UTC',
+            },
+            'end': {
+                'dateTime': end_time,
+                'timeZone': 'UTC',
+            },
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': str(uuid.uuid4()),
+                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                }
+            },
+            'attendees': [{'email': email} for email in attendees],
+        }
+
+        # conferenceDataVersion=1 is required to create a meet link
+        event = service.events().insert(
+            calendarId='primary', 
+            body=event, 
+            conferenceDataVersion=1
+        ).execute()
+        
+        meet_link = event.get('hangoutLink', 'No link generated')
+        return f"Meeting created: {event.get('htmlLink')}\nGoogle Meet Link: {meet_link}"
+    except Exception as e:
+        return f"Error creating meeting: {str(e)}"
 
 if __name__ == "__main__":
     mcp.run()

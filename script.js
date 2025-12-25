@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8001';
 
 class ChatApp {
     constructor() {
@@ -42,7 +42,6 @@ class ChatApp {
 
             if (data.status === 'healthy') {
                 this.connectionStatus.textContent = 'Connected';
-                this.updateAgentStatus(data.agents);
             } else {
                 this.connectionStatus.textContent = 'Degraded';
             }
@@ -51,15 +50,6 @@ class ChatApp {
             this.connectionStatus.textContent = 'Disconnected';
             this.connectionStatus.parentElement.querySelector('.status-dot').style.background = 'var(--error)';
         }
-    }
-
-    updateAgentStatus(agents) {
-        Object.entries(agents).forEach(([agent, status]) => {
-            const badge = document.querySelector(`[data-agent="${agent}"]`);
-            if (badge && status === 'ready') {
-                badge.classList.add('active');
-            }
-        });
     }
 
     autoResize() {
@@ -262,6 +252,7 @@ class ChatApp {
                 'drive_only': '📁',
                 'calendar_only': '📅',
                 'docs_only': '📝',
+                'tldv_only': '🗒️',
                 'multi_workspace': '🌐',
                 'general': '💬'
             };
@@ -353,11 +344,114 @@ class ChatApp {
     }
 
     formatMessage(content) {
-        // Simple formatting for code blocks and line breaks
-        return content
-            .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
+        if (!content) return '';
+
+        // 1. Extract code blocks to prevent formatting inside them
+        const codeBlocks = [];
+        let processedContent = content.replace(/```(\w*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+            codeBlocks.push({ lang, code });
+            return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        });
+
+        // Also handle inline code
+        processedContent = processedContent.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+
+        // 2. Escape HTML characters (basic security)
+        processedContent = processedContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // 3. Process Markdown Lines
+        const lines = processedContent.split('\n');
+        let htmlLines = [];
+        let inList = false;
+        let listType = null; // 'ul' or 'ol'
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
+
+            // Check for headers
+            if (line.startsWith('### ')) {
+                if (inList) { htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                htmlLines.push(`<h3>${this.parseInline(line.substring(4))}</h3>`);
+                continue;
+            } else if (line.startsWith('## ')) {
+                if (inList) { htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                htmlLines.push(`<h2>${this.parseInline(line.substring(3))}</h2>`);
+                continue;
+            } else if (line.startsWith('# ')) {
+                if (inList) { htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>'); inList = false; }
+                htmlLines.push(`<h1>${this.parseInline(line.substring(2))}</h1>`);
+                continue;
+            }
+
+            // Check for Lists
+            // Unordered list (- or *)
+            const ulMatch = line.match(/^\s*[-*]\s+(.*)/);
+            // Ordered list (1.)
+            const olMatch = line.match(/^\s*\d+\.\s+(.*)/);
+
+            if (ulMatch || olMatch) {
+                const currentType = ulMatch ? 'ul' : 'ol';
+                const content = ulMatch ? ulMatch[1] : olMatch[1];
+
+                if (!inList) {
+                    htmlLines.push(`<${currentType}>`);
+                    inList = true;
+                    listType = currentType;
+                } else if (listType !== currentType) {
+                    // Switch list type (close old, open new)
+                    htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    htmlLines.push(`<${currentType}>`);
+                    listType = currentType;
+                }
+
+                htmlLines.push(`<li>${this.parseInline(content)}</li>`);
+            } else {
+                // Not a list item
+                if (inList) {
+                    htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    inList = false;
+                    listType = null;
+                }
+
+                // Handle empty lines or regular text
+                if (line.trim() === '') {
+                    htmlLines.push('<br>');
+                } else {
+                    htmlLines.push(`<p>${this.parseInline(line)}</p>`);
+                }
+            }
+        }
+
+        if (inList) {
+            htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>');
+        }
+
+        // Reassemble
+        let html = htmlLines.join('');
+
+        // 4. Restore code blocks
+        html = html.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
+            const block = codeBlocks[index];
+            return `<pre><code class="language-${block.lang}">${block.code}</code></pre>`;
+        });
+
+        // Cleanup multiple BRs
+        html = html.replace(/(<br>){3,}/g, '<br><br>');
+
+        return html;
+    }
+
+    parseInline(text) {
+        return text
+            // Bold
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            // Italic
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
     }
 
     addTypingIndicator() {
@@ -412,6 +506,9 @@ class ChatApp {
                         </button>
                         <button class="suggestion-chip" data-query="Create a folder in Google Drive">
                             📂 Create Drive folder
+                        </button>
+                        <button class="suggestion-chip" data-query="List my past meetings from last week">
+                            🗒️ List past meetings
                         </button>
                     </div>
                 </div>

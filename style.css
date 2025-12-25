@@ -128,61 +128,6 @@ body {
     font-weight: 300;
 }
 
-.agent-status {
-    flex: 1;
-    overflow-y: auto;
-}
-
-.agent-status h3 {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 1rem;
-    font-weight: 600;
-}
-
-.agent-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-}
-
-.agent-badge {
-    background: var(--bg-glass);
-    border: 1px solid var(--border-color);
-    padding: 0.75rem;
-    border-radius: var(--radius-md);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    transition: var(--transition);
-    backdrop-filter: blur(10px);
-}
-
-.agent-badge:hover {
-    background: var(--bg-glass-hover);
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
-}
-
-.agent-badge.active {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
-    border-color: var(--accent-primary);
-}
-
-.agent-icon {
-    font-size: 1.5rem;
-}
-
-.agent-badge span:last-child {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
 .sidebar-footer {
     border-top: 1px solid var(--border-color);
     padding-top: 1rem;
@@ -756,6 +701,60 @@ body {
     background: transparent;
     padding: 0;
     font-weight: 500;
+}
+
+/* Markdown Content Styles */
+.message-text h1, 
+.message-text h2, 
+.message-text h3 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.message-text h1 { font-size: 1.4rem; }
+.message-text h2 { font-size: 1.2rem; }
+.message-text h3 { font-size: 1.1rem; }
+
+.message-text p {
+    margin-bottom: 0.5rem;
+}
+
+.message-text ul, 
+.message-text ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.message-text li {
+    margin-bottom: 0.25rem;
+}
+
+.message-text strong {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.message-text a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--accent-primary);
+    transition: var(--transition);
+}
+
+.message-text a:hover {
+    color: var(--accent-secondary);
+    border-bottom-style: solid;
+}
+
+.inline-code {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--accent-primary);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
 }
 
 .status-item strong {

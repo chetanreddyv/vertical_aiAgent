@@ -12,8 +12,8 @@ from contextlib import asynccontextmanager
 import agents
 from agents import (
     intent_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    docs_agent, general_agent, mysql_mcp, calendar_mcp, drive_mcp,
-    IntentType
+    docs_agent, tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
+    drive_mcp, tldv_mcp, IntentType
 )
 from utils import format_query_results, get_temporal_context
 
@@ -35,10 +35,21 @@ agent_histories = {
     "drive": [],
     "calendar": [],
     "docs": [],
+    "tldv": [],
     "general": [],
     "intent": []
 }
 formatted_schema = ""
+
+def keep_last_n_turns(message_history: list, n_turns: int = 10) -> list:
+    """
+    Keep only the last N conversation turns (user + assistant pairs).
+    Each turn = 2 messages (user message + assistant response).
+    """
+    max_messages = n_turns * 2
+    if len(message_history) > max_messages:
+        return message_history[-max_messages:]
+    return message_history
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,7 +62,8 @@ async def lifespan(app: FastAPI):
         email_agent.run_mcp_servers(),
         sql_agent.run_mcp_servers(),
         calendar_agent.run_mcp_servers(),
-        drive_agent.run_mcp_servers()
+        drive_agent.run_mcp_servers(),
+        tldv_agent.run_mcp_servers()
     ):
         # Initialize agents (load schema, set prompts)
         try:
@@ -100,7 +112,7 @@ async def root():
     return {
         "status": "online",
         "service": "AI Agent API",
-        "agents": ["email", "sql", "drive", "calendar", "docs", "general"]
+        "agents": ["email", "sql", "drive", "calendar", "docs", "tldv", "general"]
     }
 
 @app.post("/query", response_model=QueryResponse)
@@ -125,8 +137,9 @@ async def process_query(request: QueryRequest):
         # Add temporal context
         temporal_context = get_temporal_context()
         
+        # Intent agent gets universal memory (full conversation context)
         intent_result = await intent_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["intent"])
-        agent_histories["intent"] = intent_result.new_messages()
+        # Don't update intent history yet - wait until we have the final response
         plan = intent_result.output
         
         status_updates.append(f"Detected intent: {plan.intent.value.replace('_', ' ').title()}")
@@ -192,6 +205,13 @@ async def process_query(request: QueryRequest):
             agent_result = await docs_agent.run(f"{temporal_context}{plan.docs_task}", message_history=agent_histories["docs"])
             agent_histories["docs"] = agent_result.new_messages()
             status_updates.append("Docs operation completed")
+
+        elif plan.intent == IntentType.TLDV_ONLY and plan.tldv_task:
+            status_updates.append("Accessing TLDV Records...")
+            logger.info("🎥 Executing TLDV Agent")
+            agent_result = await tldv_agent.run(f"{temporal_context}{plan.tldv_task}", message_history=agent_histories["tldv"])
+            agent_histories["tldv"] = agent_result.new_messages()
+            status_updates.append("TLDV operation completed")
             
         elif plan.intent == IntentType.EMAIL_AND_SQL and plan.sql_task and plan.email_task:
             logger.info("🔄 Executing Multi-agent workflow: SQL → Email")
@@ -236,6 +256,20 @@ async def process_query(request: QueryRequest):
         # Check if agent_result has sql_data attribute
         sql_data = getattr(agent_result, 'sql_data', None)
         
+        # Update intent agent history with FULL conversation (user query + assistant response)
+        # This gives it universal context for understanding follow-up questions
+        agent_histories["intent"] = intent_result.new_messages()
+        if agent_result:
+            # Manually append the assistant's response to intent history
+            from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+            assistant_msg = ModelResponse(
+                parts=[TextPart(content=str(agent_result.output))]
+            )
+            agent_histories["intent"].append(assistant_msg)
+        
+        # Keep only last 10 turns (20 messages) in intent history
+        agent_histories["intent"] = keep_last_n_turns(agent_histories["intent"], n_turns=10)
+        
         return QueryResponse(
             intent=plan.intent.value,
             response=str(agent_result.output),
@@ -267,7 +301,7 @@ async def query_stream_generator(query: str):
         temporal_context = get_temporal_context()
         
         intent_result = await intent_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["intent"])
-        agent_histories["intent"] = intent_result.new_messages()
+        # Don't update intent history yet - wait until we have the final response
         plan = intent_result.output
         
         intent_display = plan.intent.value.replace("_", " ").title()
@@ -331,6 +365,12 @@ async def query_stream_generator(query: str):
             agent_result = await docs_agent.run(f"{temporal_context}{plan.docs_task}", message_history=agent_histories["docs"])
             agent_histories["docs"] = agent_result.new_messages()
             yield f"data: {json.dumps({'type': 'status', 'content': 'Docs operation completed'})}\n\n"
+
+        elif plan.intent == IntentType.TLDV_ONLY and plan.tldv_task:
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Accessing TLDV Records...'})}\n\n"
+            agent_result = await tldv_agent.run(f"{temporal_context}{plan.tldv_task}", message_history=agent_histories["tldv"])
+            agent_histories["tldv"] = agent_result.new_messages()
+            yield f"data: {json.dumps({'type': 'status', 'content': 'TLDV operation completed'})}\n\n"
             
         elif plan.intent == IntentType.EMAIL_AND_SQL and plan.sql_task and plan.email_task:
             # Step 1: SQL
@@ -368,6 +408,19 @@ async def query_stream_generator(query: str):
             agent_histories["general"] = agent_result.new_messages()
             yield f"data: {json.dumps({'type': 'status', 'content': 'Response generated'})}\n\n"
             
+        # Update intent agent history with FULL conversation (user query + assistant response)
+        agent_histories["intent"] = intent_result.new_messages()
+        if agent_result:
+            # Manually append the assistant's response to intent history
+            from pydantic_ai.messages import ModelResponse, TextPart
+            assistant_msg = ModelResponse(
+                parts=[TextPart(content=str(agent_result.output))]
+            )
+            agent_histories["intent"].append(assistant_msg)
+        
+        # Keep only last 10 turns (20 messages) in intent history
+        agent_histories["intent"] = keep_last_n_turns(agent_histories["intent"], n_turns=10)
+            
         # Send final result
         response_data = {
             "intent": plan.intent.value,
@@ -397,7 +450,9 @@ async def reset_history(session_id: str = "default"):
         "sql": [],
         "drive": [],
         "calendar": [],
+        "calendar": [],
         "docs": [],
+        "tldv": [],
         "general": [],
         "intent": []
     }
@@ -424,12 +479,14 @@ async def health_check():
             "drive": "ready",
             "calendar": "ready",
             "docs": "ready",
+            "tldv": "ready",
             "general": "ready"
         },
         "mcp_servers": {
             "mysql": "connected",
             "calendar": "connected",
-            "drive": "connected"
+            "drive": "connected",
+            "tldv": "connected"
         },
         "schema_loaded": formatted_schema != "Schema unavailable."
     }

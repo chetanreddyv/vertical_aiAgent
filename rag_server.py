@@ -21,13 +21,14 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def get_db_connection():
     """Establish a connection to the PostgreSQL database."""
+    schema = os.getenv("PG_SCHEMA", "public")
     conn = psycopg2.connect(
         host=os.getenv("PG_HOST", "localhost"),
         port=os.getenv("PG_PORT", "5432"),
         user=os.getenv("PG_USER"),
         password=os.getenv("PG_PASSWORD"),
         dbname=os.getenv("PG_DB"),
-        options=f"-c search_path=app_data,public"
+        options=f"-c search_path={schema}"
     )
     # Ensure vector extension exists (or at least try, requires verify)
     try:
@@ -61,6 +62,7 @@ def search_meetings(query: str, limit: int = 5) -> Dict[str, Any]:
         query_embedding = get_embedding(query)
         
         table_name = os.getenv("PG_TABLE_NAME", "meeting_embeddings")
+        schema = os.getenv("PG_SCHEMA", "public")
         
         # Connect to DB and search
         with get_db_connection() as conn:
@@ -68,10 +70,9 @@ def search_meetings(query: str, limit: int = 5) -> Dict[str, Any]:
                 # PGVector L2 distance operator is <->
                 # Cosine distance is <=>
                 # Using <=> for cosine distance (usually preferred for embeddings)
-                # Schema: app_data.meeting_embeddings
                 sql = f"""
                     SELECT content, metadata, meeting_id, 1 - (embedding <=> %s::vector) as similarity
-                    FROM app_data.meeting_embeddings
+                    FROM {schema}.{table_name}
                     ORDER BY embedding <=> %s::vector
                     LIMIT %s
                 """

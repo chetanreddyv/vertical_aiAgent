@@ -54,7 +54,7 @@ class sql(BaseModel):
 
 # MySQL (unchanged)
 mysql_mcp = MCPServerStdio(
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["sql_server.py"],
     env={
         "DB_HOST": os.getenv("DB_HOST"),
@@ -70,7 +70,7 @@ mysql_mcp = MCPServerStdio(
 
 # Custom Calendar MCP
 calendar_mcp = MCPServerStdio(
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["calendar_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -80,7 +80,7 @@ calendar_mcp = MCPServerStdio(
 
 # Custom Drive MCP
 drive_mcp = MCPServerStdio(
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["drive_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -106,7 +106,7 @@ tldv_mcp = MCPServerStdio(
 
 # RAG MCP (Postgres Vector)
 rag_mcp = MCPServerStdio(
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["rag_server.py"],
     env={
         "PG_HOST": os.getenv("PG_HOST", "localhost"),

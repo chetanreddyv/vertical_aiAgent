@@ -2,88 +2,508 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Agent Assistant</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Agentic Chatbot Home - Polished</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&amp;display=swap" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "nature-dark": "#1a2e26",
+                        "nature-medium": "#4a6c5f",   // Softened medium green
+                        "nature-light": "#f1f7f4",    // Even lighter, cleaner base
+                        "nature-accent": "#5ba368",   // Softened from vibrant green to a more natural sage/moss green
+                        "nature-secondary": "#7dbbd6",// Softened sky blue
+                        "glass-border": "rgba(255, 255, 255, 0.4)",
+                        "glass-bg": "rgba(255, 255, 255, 0.65)",
+                        "glass-bg-hover": "rgba(255, 255, 255, 0.85)",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    backgroundImage: {
+                        'nature-gradient': 'linear-gradient(135deg, #eff7f5 0%, #f4fbf6 50%, #f7fcf9 100%)',
+                    },
+                    keyframes: {
+                        'fade-in-up': {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    },
+                    animation: {
+                        'fade-in-up': 'fade-in-up 0.3s ease-out forwards',
+                    }
+                },
+            },
+        }
+    </script>
+    <style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            @apply bg-nature-medium/10 rounded-full;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            @apply bg-nature-medium/20;
+        }
+        .glass-base {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.03);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 16px -4px rgba(20, 50, 40, 0.03);
+        }
+        .glass-input {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06);
+        }
+        .glass-sidebar {
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-right: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        /* Legacy Message Styles adapted to New UI */
+        .message {
+            @apply flex gap-4 md:gap-6 mb-6 animate-fade-in-up max-w-4xl mx-auto w-full px-4;
+        }
+        .message-avatar {
+            @apply w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 shadow-md transition-transform hover:scale-105;
+        }
+        .message.user .message-avatar {
+            @apply bg-gradient-to-br from-nature-accent to-[#3c7d4d] text-white shadow-nature-accent/20;
+        }
+        .message.assistant .message-avatar {
+            @apply bg-white text-nature-dark border border-white/60 shadow-black/5;
+        }
+        .message-content {
+            @apply flex-1 p-6 rounded-[20px] shadow-sm border text-[15px] leading-relaxed;
+        }
+        .message.user .message-content {
+            @apply bg-nature-medium text-white border-nature-medium shadow-lg shadow-nature-medium/10;
+        }
+        .message.assistant .message-content {
+            @apply glass-card text-nature-dark; 
+        }
+        .message-header {
+            @apply flex items-center gap-3 mb-3;
+        }
+        .message-name {
+            @apply font-bold text-sm tracking-wide;
+        }
+        .message.user .message-name { @apply text-white/90; }
+        .message.assistant .message-name { @apply text-nature-dark; }
+
+        .intent-badge {
+            @apply px-2 py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-nature-accent/10 text-nature-dark border border-nature-accent/20;
+        }
+
+        /* Status updates */
+        .status-message .message-content {
+            @apply bg-white/40 border-white/50 backdrop-blur-sm;
+        }
+        .status-dot {
+            @apply w-2 h-2 rounded-full bg-nature-accent animate-pulse shadow-[0_0_8px_rgba(91,163,104,0.6)];
+        }
+        .status-text {
+            @apply text-nature-medium text-sm font-medium;
+        }
+        .status-item {
+            @apply flex items-center gap-3 py-1.5;
+        }
+
+        /* SQL Table */
+        .sql-table-container {
+            @apply overflow-x-auto rounded-xl border border-white/50 bg-white/30 backdrop-blur-sm mt-4 shadow-inner;
+        }
+        .sql-table {
+            @apply w-full text-sm text-left border-collapse;
+        }
+        .sql-table th {
+            @apply p-3 font-bold text-nature-dark border-b border-nature-medium/10 bg-white/40 uppercase tracking-wider text-[11px];
+        }
+        .sql-table td {
+            @apply p-3 text-nature-dark/80 border-b border-nature-medium/5 font-medium;
+        }
+        .sql-table tr:hover td {
+            @apply bg-white/40;
+        }
+        .table-footer {
+            @apply p-3 text-xs text-nature-medium/60 font-bold uppercase tracking-wider text-right border-t border-nature-medium/5;
+        }
+
+        /* Markdown Styles */
+        .message-text h1 { @apply text-xl font-bold mb-3 mt-4; }
+        .message-text h2 { @apply text-lg font-bold mb-2 mt-3; }
+        .message-text h3 { @apply text-base font-bold mb-2 mt-2; }
+        .message-text p { @apply mb-2; }
+        .message-text ul { @apply list-disc list-inside mb-2 pl-2; }
+        .message-text ol { @apply list-decimal list-inside mb-2 pl-2; }
+        .message-text pre {
+            @apply bg-nature-dark/5 p-4 rounded-xl overflow-x-auto my-3 border border-nature-dark/5 shadow-inner;
+        }
+        .message-text code {
+            @apply font-mono text-xs text-nature-dark bg-white/50 px-1.5 py-0.5 rounded border border-nature-dark/5;
+        }
+        .message.user .message-text code {
+            @apply text-white bg-white/20 border-white/10;
+        }
+        .message.user .message-text pre {
+            @apply bg-black/20 text-white border-white/10;
+        }
+        .message-text a {
+            @apply underline underline-offset-2 decoration-nature-accent/50 hover:decoration-nature-accent transition-all font-medium;
+        }
+        .message.user .message-text a {
+            @apply decoration-white/50 hover:decoration-white;
+        }
+        
+        .typing-indicator {
+            @apply flex gap-1.5 p-2;
+        }
+        .typing-dot {
+            @apply w-2 h-2 rounded-full bg-nature-medium/40 animate-pulse;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 150ms; }
+        .typing-dot:nth-child(3) { animation-delay: 300ms; }
+    </style>
 </head>
 
-<body>
-    <div class="container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <h1>AI Agent</h1>
-                </div>
-                <button class="new-chat-btn" id="newChatBtn">
-                    <span class="btn-icon">+</span>
-                    New Chat
-                </button>
-            </div>
+<body
+    class="bg-nature-gradient text-nature-dark font-display h-screen overflow-hidden selection:bg-nature-accent selection:text-white">
+    <div class="flex h-full w-full relative">
+        <input class="peer hidden" id="sidebar-toggle" type="checkbox" />
+        <aside
+            class="sidebar hidden md:flex flex-col h-full glass-sidebar w-[280px] peer-checked:w-[88px] transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] z-20 shadow-sm relative flex-shrink-0">
+            <div class="flex flex-col h-full justify-between py-6 px-4 overflow-hidden">
+                <div class="flex flex-col gap-8">
+                    <div
+                        class="flex items-center gap-3 h-10 px-2 overflow-hidden whitespace-nowrap transition-all duration-300 opacity-100 [.sidebar:hover_&]:opacity-100 peer-checked:opacity-0 peer-checked:w-0 peer-checked:px-0 [.sidebar:hover_&]:w-auto [.sidebar:hover_&]:px-2">
+                        <div
+                            class="w-9 h-9 rounded-xl bg-gradient-to-br from-nature-accent to-[#3c7d4d] flex items-center justify-center shadow-lg shadow-nature-accent/20 flex-shrink-0">
+                            <span class="material-symbols-outlined text-white text-[22px]">spa</span>
+                        </div>
+                        <h1 class="text-nature-dark text-[19px] font-bold tracking-tight">Agentic</h1>
+                    </div>
 
-            <div class="sidebar-footer">
-                <div class="status-indicator">
-                    <span class="status-dot"></span>
-                    <span id="connectionStatus">Connected</span>
+                    <!-- Toggle Button moved below logo -->
+                    <div class="flex px-2">
+                        <label
+                            class="cursor-pointer text-nature-medium hover:text-nature-dark transition-colors p-1.5 rounded-lg hover:bg-white/40 flex items-center gap-2 group/toggle w-full peer-checked:justify-center"
+                            for="sidebar-toggle">
+                            <span
+                                class="material-symbols-outlined transform rotate-180 peer-checked:rotate-0 transition-transform duration-300">first_page</span>
+                            <span
+                                class="text-sm font-medium whitespace-nowrap opacity-100 transition-opacity duration-300 peer-checked:opacity-0 peer-checked:hidden [.sidebar:hover_&]:opacity-100 [.sidebar:hover_&]:block">Collapse</span>
+                        </label>
+                    </div>
+                    <!-- New Chat Button with ID for script.js -->
+                    <!-- New Chat Button with ID for script.js -->
+                    <button id="newChatBtn"
+                        class="new-chat-btn flex items-center gap-3 overflow-hidden rounded-xl h-[52px] bg-nature-dark hover:bg-nature-medium transition-all duration-300 text-white shadow-lg shadow-nature-dark/10 group relative px-3 w-full active:scale-[0.98]">
+                        <div class="flex items-center justify-center w-6 h-6 flex-shrink-0">
+                            <span class="material-symbols-outlined text-[24px]">add_circle</span>
+                        </div>
+                        <span
+                            class="font-bold text-[15px] tracking-wide whitespace-nowrap opacity-100 transition-opacity duration-200 peer-checked:opacity-0 peer-checked:w-0 [.sidebar:hover_&]:opacity-100 [.sidebar:hover_&]:w-auto sidebar-label">New
+                            Chat</span>
+                    </button>
+                    <style>
+                        /* Hover expand logic */
+                        #sidebar-toggle:checked~aside:hover {
+                            width: 280px;
+                        }
+
+                        #sidebar-toggle:checked~aside:hover .sidebar-label,
+                        #sidebar-toggle:checked~aside:hover .sidebar-section-title,
+                        #sidebar-toggle:checked~aside:hover h1,
+                        #sidebar-toggle:checked~aside:hover span.text-sm {
+                            opacity: 1;
+                            display: block;
+                            width: auto;
+                        }
+
+                        /* Hide elements when collapsed and NOT hovered */
+                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-label {
+                            opacity: 0;
+                            width: 0;
+                            display: none;
+                        }
+
+                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-section-title {
+                            display: none;
+                        }
+
+                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-item {
+                            justify-content: center;
+                            padding-left: 0;
+                            padding-right: 0;
+                        }
+
+                        /* Fix new chat padding when collapsed/not hovered */
+                        #sidebar-toggle:checked~aside:not(:hover) .new-chat-btn {
+                            justify-content: center;
+                            padding: 0;
+                        }
+                    </style>
+                    <div class="flex flex-col gap-1 overflow-y-auto pr-0 mt-2">
+                        <div class="flex flex-col gap-1.5">
+                            <p
+                                class="text-nature-medium/60 text-[11px] font-bold uppercase tracking-wider px-4 py-2 sidebar-section-title">
+                                History</p>
+                            <div
+                                class="flex items-center h-[42px] px-4 rounded-xl font-medium text-nature-medium/50 text-sm italic">
+                                Recent chats will appear here...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 border-t border-nature-medium/10 pt-5">
+                    <div class="flex items-center h-[52px] px-3 rounded-xl cursor-pointer hover:bg-white/40 transition-colors group sidebar-item gap-3.5"
+                        title="Profile">
+                        <div
+                            class="h-9 w-9 rounded-full bg-gradient-to-br from-[#7dbbd6] to-[#5ba368] flex items-center justify-center text-white text-xs font-bold shadow-sm ring-2 ring-white/60">
+                            AM</div>
+                        <div class="flex flex-col sidebar-label gap-0.5">
+                            <p class="text-nature-dark text-[14px] font-bold leading-none">Alex Morgan</p>
+                            <!-- Connection Status hidden structure for script.js -->
+                            <div class="status-indicator flex items-center gap-1.5 mt-1">
+                                <span class="status-dot w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                <span id="connectionStatus"
+                                    class="text-[10px] text-nature-medium/80 font-medium uppercase tracking-wide">Connected</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </aside>
+        <main class="flex-1 flex flex-col h-full relative overflow-hidden">
+            <div
+                class="absolute top-[-5%] left-[5%] w-[35%] h-[35%] bg-emerald-200/20 rounded-full blur-[120px] pointer-events-none">
+            </div>
+            <div
+                class="absolute bottom-[10%] right-[5%] w-[30%] h-[30%] bg-blue-100/30 rounded-full blur-[120px] pointer-events-none">
+            </div>
 
-        <!-- Main Chat Area -->
-        <main class="chat-container">
-            <div class="chat-header">
-                <h2>Multi-Agent Assistant</h2>
-                <div class="header-actions">
-                    <button class="icon-btn" id="clearHistoryBtn" title="Clear History">
-                        <span>🔄</span>
+            <!-- Header for mobile / Clear History -->
+            <div
+                class="absolute top-0 left-0 w-full z-40 p-4 flex justify-between md:justify-end items-center pointer-events-none">
+                <div
+                    class="md:hidden flex items-center gap-2 pointer-events-auto bg-white/80 backdrop-blur-md p-2 rounded-xl shadow-sm border border-white/60">
+                    <button id="mobileMenuBtn" class="p-1 text-nature-dark flex items-center justify-center">
+                        <span class="material-symbols-outlined">menu</span>
                     </button>
+                    <span class="material-symbols-outlined text-nature-accent">spa</span>
+                    <span class="font-bold text-nature-dark">Agentic</span>
                 </div>
+
+                <button id="clearHistoryBtn"
+                    class="pointer-events-auto p-2.5 rounded-xl bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/60 text-nature-medium hover:text-nature-accent shadow-sm transition-all"
+                    title="Clear History">
+                    <span class="material-symbols-outlined text-[20px]">restart_alt</span>
+                </button>
             </div>
 
-            <div class="messages-container" id="messagesContainer">
-                <div class="welcome-message">
-                    <div class="welcome-icon">✨</div>
-                    <h2>Welcome to AI Agent Assistant</h2>
-                    <p>I can help you with email, database queries, file management, calendar scheduling, and more.</p>
-                    <div class="suggestions">
-                        <button class="suggestion-chip" data-query="List my Google Drive files">
-                            📁 List Drive files
-                        </button>
-                        <button class="suggestion-chip" data-query="Create a calendar event for tomorrow at 2pm">
-                            📅 Schedule meeting
-                        </button>
-                        <button class="suggestion-chip" data-query="Show me all tables in the Salesforce database">
-                            🗄️ Show database tables
-                        </button>
-                        <button class="suggestion-chip"
-                            data-query="Create a video meeting for Project Sync at 3pm today">
-                            🎥 Create video meeting
-                        </button>
-                        <button class="suggestion-chip" data-query="List my past meetings from last week">
-                            🗒️ List past meetings
-                        </button>
+            <!-- Messages Container with ID for script.js -->
+            <div id="messagesContainer"
+                class="messages-container flex-1 overflow-y-auto w-full flex flex-col items-center relative z-10 scroll-smooth pb-[280px]">
+
+                <!-- Welcome Message Wrapper -->
+                <div id="welcomeScreen"
+                    class="welcome-message w-full max-w-[1024px] px-4 md:px-10 py-12 flex flex-col gap-10">
+
+                    <div class="flex flex-col gap-4 mt-4 md:mt-8 animate-fade-in-up text-center md:text-left">
+                        <div class="flex items-center gap-5 justify-center md:justify-start">
+                            <h1
+                                class="text-nature-dark text-4xl md:text-[44px] font-extrabold tracking-tight drop-shadow-sm leading-tight">
+                                Good morning, Alex</h1>
+                        </div>
+                        <p class="text-nature-medium text-lg md:text-[22px] font-normal text-opacity-80">
+                            How can I help you navigate your work today?</p>
+                    </div>
+                    <div class="suggestions grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+                        <!-- Cards serving as suggesters -->
+                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/5 hover:border-emerald-200/50"
+                            data-query="Draft an email for me">
+                            <div
+                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)] animate-pulse">
+                            </div>
+                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
+                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD1At1eju4qfFRAruSTbBwONISvSxuF2KNH0-ldZHAQDOROixd94noFnZGtptRKIKrBx2shBndIo1f18NrS46FBxNH49R0DxUFwo8e8owVmiGQTF-ke8G1Ts2WqU0YGB5o3yCEHQiuZlXKNDfgyWnFenlyHmIS7Zptow5d7ZGozuUjOLE0h0hWXaQmb2Ur2uM-lKQI8juUExz9TAJx5IxZUDRQNJmkAGNex3_1TvgxC81v3FEm2ZgaURa08E5Z7M5x1W0WkCjN7cg');">
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2.5 mb-1.5">
+                                    <div class="p-2 rounded-xl bg-blue-50/80 text-blue-500 ring-1 ring-blue-100/50">
+                                        <span class="material-symbols-outlined text-[20px] filled">mail</span>
+                                    </div>
+                                    <p class="text-nature-dark text-[17px] font-bold">Email</p>
+                                </div>
+                                <p class="text-nature-medium text-[13px] leading-relaxed">Draft, summarize &amp;
+                                    organize inbox</p>
+                            </div>
+                        </div>
+                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/5 hover:border-purple-200/50"
+                            data-query="Show me all tables in the database">
+                            <div
+                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)]">
+                            </div>
+                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
+                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC3DXrobsaDmPscOLzUj5w0BLC24oUoutlavmC3ctyY65Y4T3MhZLbROlthgx_5DTj-fmvAtfrsTlmnyoqgv1fa7OdftC-aWMfsW7Tz1s5SjuewOUPlF97FVXtsSXLaufCBUN3box73liIFM-TawKPs00Gesczvrm5Os-25GiqUIna4alFBsBxXJqgdF4B1FbE78K_SCi0o4TiKEcdE6qGKaGfJbhtW6aF_MjKMCWlCoz4XonEFHEzE-4LqXblqDcOXq0CT3lMm3Q');">
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2.5 mb-1.5">
+                                    <div
+                                        class="p-2 rounded-xl bg-purple-50/80 text-purple-500 ring-1 ring-purple-100/50">
+                                        <span class="material-symbols-outlined text-[20px] filled">database</span>
+                                    </div>
+                                    <p class="text-nature-dark text-[17px] font-bold">SQL</p>
+                                </div>
+                                <p class="text-nature-medium text-[13px] leading-relaxed">Query databases naturally</p>
+                            </div>
+                        </div>
+                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/5 hover:border-amber-200/50"
+                            data-query="List my Google Drive files">
+                            <div
+                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)]">
+                            </div>
+                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
+                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAfCHX0EhnB_UuDnCkGE2NvhL-X2fTjtCsoQgd0_Ksovmrx4_ZzwBnC0HAf5BdTXWwmvQHDNwGTMuth6HGWgxdCtYJ4wloinr4jLbk_ucTbTrJ6QIZFHii0OlDYOX9IetExXUv61P_A2QarRfTUedI2t3Bg1AIVsHuzbvb5PG9HzUkeb_sHCDVqm18xwHLLXLPi4WfgPrc2tYu0LyKnGl5_05jBfft8JoWJFrQe0f3QL5j2ZKt3kRA2OayuOh-ubKjTYBVJBn7GNw');">
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2.5 mb-1.5">
+                                    <div class="p-2 rounded-xl bg-amber-50/80 text-amber-500 ring-1 ring-amber-100/50">
+                                        <span class="material-symbols-outlined text-[20px] filled">folder_open</span>
+                                    </div>
+                                    <p class="text-nature-dark text-[17px] font-bold">Drive</p>
+                                </div>
+                                <p class="text-nature-medium text-[13px] leading-relaxed">Search and organize files</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
             </div>
 
-            <div class="input-container">
-                <form id="chatForm" class="chat-form">
-                    <div class="input-wrapper">
-                        <textarea id="userInput" placeholder="Ask me anything..." rows="1"
-                            autocomplete="off"></textarea>
-                        <button type="submit" class="send-btn" id="sendBtn">
-                            <span class="send-icon">➤</span>
-                        </button>
+            <div
+                class="absolute bottom-0 left-0 right-0 pt-16 pb-8 px-4 md:px-8 flex justify-center z-50 pointer-events-none">
+                <div
+                    class="absolute inset-0 bg-gradient-to-t from-[#f7fcf9] via-[#f7fcf9]/95 to-transparent pointer-events-none">
+                </div>
+                <div class="w-full max-w-[900px] pointer-events-auto relative">
+                    <div class="flex flex-col gap-5">
+
+                        <!-- Search Input Form with ID for script.js -->
+                        <form id="chatForm"
+                            class="relative flex items-center w-full rounded-[24px] glass-input focus-within:border-nature-accent/40 focus-within:ring-4 focus-within:ring-nature-accent/5 transition-all duration-300">
+                            <textarea id="userInput"
+                                class="flex w-full min-h-[72px] max-h-[200px] resize-none overflow-hidden bg-transparent text-nature-dark placeholder:text-nature-medium/50 px-7 py-5 pr-[140px] text-[17px] font-medium border-none focus:ring-0 focus:outline-none"
+                                placeholder="Ask me to find a file, write a query, or schedule a meeting..." rows="1"
+                                autocomplete="off"></textarea>
+                            <div class="absolute right-3 bottom-3 flex items-center gap-1.5">
+                                <button type="button"
+                                    class="flex items-center justify-center p-2.5 rounded-full hover:bg-black/5 text-nature-medium/60 hover:text-nature-dark transition-colors"
+                                    title="Attach file">
+                                    <span class="material-symbols-outlined text-[22px]">attach_file</span>
+                                </button>
+                                <!-- Send Button with ID for script.js -->
+                                <button type="submit" id="sendBtn"
+                                    class="flex items-center justify-center h-10 w-10 rounded-full bg-nature-accent hover:bg-[#4a8c5f] text-white shadow-lg shadow-nature-accent/20 transition-all hover:scale-105 active:scale-95 ml-2">
+                                    <span class="material-symbols-outlined text-[22px] send-icon">arrow_upward</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="flex flex-col items-center gap-2.5">
+                            <div class="w-full flex justify-between items-center px-4">
+                                <span
+                                    class="text-[11px] font-bold uppercase tracking-wider text-nature-medium/50">Suggested
+                                    Actions</span>
+                                <button id="dismissSuggestionsBtn"
+                                    class="text-nature-medium/50 hover:text-nature-dark text-[11px] font-semibold flex items-center gap-1 transition-colors uppercase tracking-wide">
+                                    <span>Dismiss</span>
+                                    <span class="material-symbols-outlined text-[12px]">close</span>
+                                </button>
+                            </div>
+                            <div class="suggestions flex flex-wrap items-center justify-center gap-2.5 w-full">
+                                <button
+                                    class="suggestion-chip flex items-center gap-2 pl-3 pr-4 py-2 rounded-full bg-white/70 border border-white/60 hover:bg-white/95 hover:border-blue-200 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 group"
+                                    data-query="Draft an email to the team">
+                                    <span class="material-symbols-outlined text-[18px] text-blue-500">mail</span>
+                                    <span
+                                        class="text-nature-dark text-[13px] font-medium group-hover:text-blue-900">Draft
+                                        email to team</span>
+                                </button>
+                                <button
+                                    class="suggestion-chip flex items-center gap-2 pl-3 pr-4 py-2 rounded-full bg-white/70 border border-white/60 hover:bg-white/95 hover:border-purple-200 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 group"
+                                    data-query="Show me the top 5 customers from the database">
+                                    <span class="material-symbols-outlined text-[18px] text-purple-500">database</span>
+                                    <span
+                                        class="text-nature-dark text-[13px] font-medium group-hover:text-purple-900">Query
+                                        top 5 customers</span>
+                                </button>
+                                <button
+                                    class="suggestion-chip flex items-center gap-2 pl-3 pr-4 py-2 rounded-full bg-white/70 border border-white/60 hover:bg-white/95 hover:border-red-200 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 group"
+                                    data-query="Schedule a 30m meeting with Alex">
+                                    <span
+                                        class="material-symbols-outlined text-[18px] text-red-500">calendar_month</span>
+                                    <span
+                                        class="text-nature-dark text-[13px] font-medium group-hover:text-red-900">Schedule
+                                        30m with Alex</span>
+                                </button>
+                                <button
+                                    class="suggestion-chip flex items-center gap-2 pl-3 pr-4 py-2 rounded-full bg-white/70 border border-white/60 hover:bg-white/95 hover:border-amber-200 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 group"
+                                    data-query="Search for Q3 specs in Drive">
+                                    <span
+                                        class="material-symbols-outlined text-[18px] text-amber-500">folder_open</span>
+                                    <span
+                                        class="text-nature-dark text-[13px] font-medium group-hover:text-amber-900">Search
+                                        Q3 specs</span>
+                                </button>
+                                <button
+                                    class="suggestion-chip flex items-center gap-2 pl-3 pr-4 py-2 rounded-full bg-white/70 border border-white/60 hover:bg-white/95 hover:border-pink-200 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 group"
+                                    data-query="Summarize the last TLDV meeting">
+                                    <span
+                                        class="material-symbols-outlined text-[18px] text-pink-500">video_camera_front</span>
+                                    <span
+                                        class="text-nature-dark text-[13px] font-medium group-hover:text-pink-900">Summarize
+                                        last TLDV</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </form>
+                </div>
             </div>
         </main>
     </div>
-
     <script src="script.js"></script>
 </body>
 

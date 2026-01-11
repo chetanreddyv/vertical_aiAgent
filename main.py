@@ -7,13 +7,15 @@ from typing import Optional, Dict, Any
 import logging
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ModelRequest, UserPromptPart
 
 # Import the client agents and utilities
 import agents
+
 from agents import (
-    intent_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
+    manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
     docs_agent, tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
-    drive_mcp, tldv_mcp, IntentType
+    drive_mcp, tldv_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
 
@@ -28,28 +30,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global state for agent histories and schema
-agent_histories = {
-    "email": [],
-    "sql": [],
-    "drive": [],
-    "calendar": [],
-    "docs": [],
-    "tldv": [],
-    "general": [],
-    "intent": []
-}
+# Global universal conversation history
+conversation_history = []
 formatted_schema = ""
 
-def keep_last_n_turns(message_history: list, n_turns: int = 10) -> list:
-    """
-    Keep only the last N conversation turns (user + assistant pairs).
-    Each turn = 2 messages (user message + assistant response).
-    """
+
+def keep_last_n_turns(message_history: list, n_turns: int = 15) -> list:
+    """Keep only the last N conversation turns (user + assistant pairs)."""
     max_messages = n_turns * 2
     if len(message_history) > max_messages:
         return message_history[-max_messages:]
     return message_history
+
+def get_agent_by_name(name: str):
+    """Retrieve agent instance by enum name"""
+    agents_map = {
+        "email": email_agent,
+        "sql": sql_agent,
+        "drive": drive_agent,
+        "calendar": calendar_agent,
+        "docs": docs_agent,
+        "tldv": tldv_agent,
+        "general": general_agent
+    }
+    return agents_map.get(name, general_agent)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -118,166 +122,100 @@ async def root():
 @app.post("/query", response_model=QueryResponse)
 async def process_query(request: QueryRequest):
     """
-    Process a user query through the agent orchestration system
+    Process a user query through the Manager Agent orchestration system
     """
+    global conversation_history
     try:
         user_input = request.query.strip()
         if not user_input:
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
-        # Collect status updates
         status_updates = []
-        
         logger.info(f"📥 Received query: '{user_input[:50]}...'")
         
-        # Classify intent
         status_updates.append("Analyzing your request...")
-        logger.info("🔍 Classifying intent...")
+        logger.info("🔍 Manager Agent: Planning execution steps...")
         
-        # Add temporal context
         temporal_context = get_temporal_context()
         
-        # Intent agent gets universal memory (full conversation context)
-        intent_result = await intent_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["intent"])
-        # Don't update intent history yet - wait until we have the final response
-        plan = intent_result.output
+        # 1. Manager Agent creates the Execution Plan
+        # We pass the full conversation history to the manager so it has context
+        from agents import manager_agent
+        plan_result = await manager_agent.run(
+            f"{temporal_context}{user_input}", 
+            message_history=conversation_history
+        )
+        plan = plan_result.output
         
-        status_updates.append(f"Detected intent: {plan.intent.value.replace('_', ' ').title()}")
+        status_updates.append("Plan created with steps: " + ", ".join([str(s.agent.value).upper() for s in plan.steps]))
         
-        logger.info(f"✅ Intent: {plan.intent.value}")
+        # 2. Execute Steps Sequentially
+        step_results = []
+        sql_data = None
         
-        # Execute appropriate agent workflow
-        agent_result = None
-        
-        if plan.intent == IntentType.EMAIL_ONLY and plan.email_task:
-            status_updates.append("Processing email request...")
-            logger.info("📧 Executing Email Agent")
-            agent_result = await email_agent.run(f"{temporal_context}{plan.email_task}", message_history=agent_histories["email"])
-            agent_histories["email"] = agent_result.new_messages()
-            status_updates.append("Email operation completed")
+        for i, step in enumerate(plan.steps):
+            agent_name = step.agent.value
+            status_updates.append(f"Step {i+1}: Executing {agent_name.upper()} Agent...")
+            logger.info(f"🔄 Step {i+1}: {agent_name} - {step.instruction}")
             
-        elif plan.intent == IntentType.SQL_ONLY and plan.sql_task:
-            status_updates.append("Generating SQL query...")
-            logger.info("🗄️ Executing SQL Agent")
-            sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
-            agent_histories["sql"] = sql_result.new_messages()
+            # Context for the specific step
+            previous_steps_context = ""
+            if step_results:
+                previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
             
-            # Get the generated query and explanation
-            query = sql_result.output.sqlquery
-            explanation = sql_result.output.explanation or "No explanation provided"
+            agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
             
-            # Show SQL query immediately (before execution)
-            status_updates.append(f"📝 {explanation}")
-            status_updates.append(f"🔍 Generated Query: {query}")
-            status_updates.append("Executing database query...")
-            query_result = await mysql_mcp.direct_call_tool(
-                name="execute_query",
-                args={"query": query, "database": "Salesforce", "read_only": True}
-            )
+            agent = get_agent_by_name(agent_name)
             
-            status_updates.append("Formatting query results...")
-            formatted_results = format_query_results(query_result)
+            # Run the agent (worker agents start fresh or with minimal history to avoid confusion)
+            result = await agent.run(agent_input)
             
-            # Create response object with structured data
-            agent_result = type('obj', (object,), {
-                'output': f"📝 Explanation: {explanation}\n\n🔍 Query: {query}\n{formatted_results}",
-                'sql_data': query_result if query_result.get('success') else None
-            })()
-            status_updates.append("Query completed successfully")
+            step_output = str(result.output)
+            step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
             
-        elif plan.intent == IntentType.DRIVE_ONLY and plan.drive_task:
-            status_updates.append("Accessing Google Drive...")
-            logger.info("📁 Executing Drive Agent")
-            agent_result = await drive_agent.run(f"{temporal_context}{plan.drive_task}", message_history=agent_histories["drive"])
-            agent_histories["drive"] = agent_result.new_messages()
-            status_updates.append("Drive operation completed")
-            
-        elif plan.intent == IntentType.CALENDAR_ONLY and plan.calendar_task:
-            status_updates.append("Accessing Google Calendar...")
-            logger.info("📅 Executing Calendar Agent")
-            agent_result = await calendar_agent.run(f"{temporal_context}{plan.calendar_task}", message_history=agent_histories["calendar"])
-            agent_histories["calendar"] = agent_result.new_messages()
-            status_updates.append("Calendar operation completed")
-            
-        elif plan.intent == IntentType.DOCS_ONLY and plan.docs_task:
-            status_updates.append("Accessing Google Docs...")
-            logger.info("📝 Executing Docs Agent")
-            agent_result = await docs_agent.run(f"{temporal_context}{plan.docs_task}", message_history=agent_histories["docs"])
-            agent_histories["docs"] = agent_result.new_messages()
-            status_updates.append("Docs operation completed")
+            # Capture SQL data if present (special case for UI rendering)
+            if hasattr(result.output, 'sqlquery'):
+                query = result.output.sqlquery
+                database = getattr(result.output, 'database', None) or "Salesforce"
+                status_updates.append(f"Executing database query on {database}...")
+                query_result = await mysql_mcp.direct_call_tool(
+                    name="execute_query",
+                    args={"query": query, "database": database, "read_only": True}
+                )
+                formatted_results = format_query_results(query_result)
+                step_results[-1] += f"\n\nResults:\n{formatted_results}"
+                if query_result.get('success'):
+                    sql_data = query_result
+                    sql_data['executed_query'] = query
+                    sql_data['executed_explanation'] = getattr(result.output, 'explanation', 'SQL Query')
 
-        elif plan.intent == IntentType.TLDV_ONLY and plan.tldv_task:
-            status_updates.append("Accessing TLDV Records...")
-            logger.info("🎥 Executing TLDV Agent")
-            agent_result = await tldv_agent.run(f"{temporal_context}{plan.tldv_task}", message_history=agent_histories["tldv"])
-            agent_histories["tldv"] = agent_result.new_messages()
-            status_updates.append("TLDV operation completed")
-            
-        elif plan.intent == IntentType.EMAIL_AND_SQL and plan.sql_task and plan.email_task:
-            logger.info("🔄 Executing Multi-agent workflow: SQL → Email")
-            
-            # Step 1: SQL
-            status_updates.append("Step 1: Generating SQL query...")
-            sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
-            agent_histories["sql"] = sql_result.new_messages()
-            
-            query = sql_result.output.sqlquery
-            explanation = sql_result.output.explanation or "No explanation provided"
-            
-            status_updates.append("Step 2: Executing database query...")
-            query_result = await mysql_mcp.direct_call_tool(
-                name="execute_query",
-                args={"query": query, "database": "Salesforce", "read_only": True}
-            )
-            formatted_results = format_query_results(query_result)
-            
-            # Step 2: Email with SQL results
-            status_updates.append("Step 3: Preparing email with results...")
-            enriched_task = f"{plan.email_task}\n\nSQL Query: {query}\n\nExplanation: {explanation}\n\nDatabase Query Results:\n{formatted_results}"
-            email_result = await email_agent.run(f"{temporal_context}{enriched_task}", message_history=agent_histories["email"])
-            agent_histories["email"] = email_result.new_messages()
-            
-            # Create combined result with SQL data
-            agent_result = type('obj', (object,), {
-                'output': email_result.output,
-                'sql_data': query_result if query_result.get('success') else None
-            })()
-            status_updates.append("Multi-agent workflow completed")
-            
-        else:
-            status_updates.append("Processing your question...")
-            logger.info("💬 Executing General Agent (fallback)")
-            agent_result = await general_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["general"])
-            agent_histories["general"] = agent_result.new_messages()
-            status_updates.append("Response generated")
+        # 3. Final Synthesis
+        start_final = " Synthesizing final response..."
+        status_updates.append(start_final)
         
-        logger.info("✅ Query processed successfully")
+
+        # We use the General agent to synthesize the final answer
+        final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
+        final_context += f"\n\nInstruction: {plan.final_response_instruction}"
         
-        # Check if agent_result has sql_data attribute
-        sql_data = getattr(agent_result, 'sql_data', None)
+        final_result = await agents.general_agent.run(final_context)
+        final_response_text = str(final_result.output)
+
+        status_updates.append("Response generated")
         
-        # Update intent agent history with FULL conversation (user query + assistant response)
-        # This gives it universal context for understanding follow-up questions
-        agent_histories["intent"] = intent_result.new_messages()
-        if agent_result:
-            # Manually append the assistant's response to intent history
-            from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
-            assistant_msg = ModelResponse(
-                parts=[TextPart(content=str(agent_result.output))]
-            )
-            agent_histories["intent"].append(assistant_msg)
-        
-        # Keep only last 10 turns (20 messages) in intent history
-        agent_histories["intent"] = keep_last_n_turns(agent_histories["intent"], n_turns=10)
-        
+        # 4. Update Universal History
+        conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        conversation_history = keep_last_n_turns(conversation_history)
+
         return QueryResponse(
-            intent=plan.intent.value,
-            response=str(agent_result.output),
+            intent="multi_agent",
+            response=final_response_text,
             success=True,
             sql_data=sql_data,
             status_updates=status_updates
         )
-        
+
     except Exception as e:
         logger.error(f"❌ Error processing query: {e}", exc_info=True)
         return QueryResponse(
@@ -289,142 +227,88 @@ async def process_query(request: QueryRequest):
 
 async def query_stream_generator(query: str):
     """Generate status updates during query processing"""
+    global conversation_history
     try:
         user_input = query.strip()
         if not user_input:
             yield f"data: {json.dumps({'type': 'error', 'error': 'Query cannot be empty'})}\n\n"
             return
-
-        # Classify intent
+            
         yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your request...'})}\n\n"
         
         temporal_context = get_temporal_context()
         
-        intent_result = await intent_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["intent"])
-        # Don't update intent history yet - wait until we have the final response
-        plan = intent_result.output
+        # 1. Manager Agent Plan
+        from agents import manager_agent
+        plan_result = await manager_agent.run(
+            f"{temporal_context}{user_input}", 
+            message_history=conversation_history
+        )
+        plan = plan_result.output
         
-        intent_display = plan.intent.value.replace("_", " ").title()
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Detected intent: {intent_display}'})}\n\n"
+        steps_desc = ", ".join([s.agent.value.upper() for s in plan.steps])
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Plan: {steps_desc}'})}\n\n"
         
-        # Stream the rewritten query
-        yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_query})}\n\n"
+        # Send the clean rewritten query to the UI
+        yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_intent})}\n\n" 
         
-        # Execute appropriate agent workflow
-        agent_result = None
+        # 2. Execute Steps
+        step_results = []
         sql_data = None
         
-        if plan.intent == IntentType.EMAIL_ONLY and plan.email_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Processing email request...'})}\n\n"
-            agent_result = await email_agent.run(f"{temporal_context}{plan.email_task}", message_history=agent_histories["email"])
-            agent_histories["email"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Email operation completed'})}\n\n"
+        for i, step in enumerate(plan.steps):
+            agent_name = step.agent.value
+            yield f"data: {json.dumps({'type': 'status', 'content': f'Step {i+1}: {agent_name.title()} Agent working...'})}\n\n"
             
-        elif plan.intent == IntentType.SQL_ONLY and plan.sql_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Generating SQL query...'})}\n\n"
-            sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
-            agent_histories["sql"] = sql_result.new_messages()
+            previous_steps_context = ""
+            if step_results:
+                previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
             
-            # Get the generated query and explanation
-            query = sql_result.output.sqlquery
-            explanation = sql_result.output.explanation or "No explanation provided"
+            agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
+            agent = get_agent_by_name(agent_name)
             
-            # Show SQL query immediately (before execution) with special type
-            yield f"data: {json.dumps({'type': 'sql_query', 'query': query, 'explanation': explanation})}\n\n"
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Executing database query...'})}\n\n"
-            query_result = await mysql_mcp.direct_call_tool(
-                name="execute_query",
-                args={"query": query, "database": "Salesforce", "read_only": True}
-            )
+            result = await agent.run(agent_input)
+            step_output = str(result.output)
+            step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
             
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Formatting query results...'})}\n\n"
-            formatted_results = format_query_results(query_result)
-            
-            # Create response object with structured data
-            agent_result = type('obj', (object,), {
-                'output': f"📝 Explanation: {explanation}\n\n🔍 Query: {query}\n{formatted_results}",
-                'sql_data': query_result if query_result.get('success') else None
-            })()
-            sql_data = query_result if query_result.get('success') else None
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Query completed successfully'})}\n\n"
-            
-        elif plan.intent == IntentType.DRIVE_ONLY and plan.drive_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Accessing Google Drive...'})}\n\n"
-            agent_result = await drive_agent.run(f"{temporal_context}{plan.drive_task}", message_history=agent_histories["drive"])
-            agent_histories["drive"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Drive operation completed'})}\n\n"
-            
-        elif plan.intent == IntentType.CALENDAR_ONLY and plan.calendar_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Accessing Google Calendar...'})}\n\n"
-            agent_result = await calendar_agent.run(f"{temporal_context}{plan.calendar_task}", message_history=agent_histories["calendar"])
-            agent_histories["calendar"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Calendar operation completed'})}\n\n"
-            
-        elif plan.intent == IntentType.DOCS_ONLY and plan.docs_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Accessing Google Docs...'})}\n\n"
-            agent_result = await docs_agent.run(f"{temporal_context}{plan.docs_task}", message_history=agent_histories["docs"])
-            agent_histories["docs"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Docs operation completed'})}\n\n"
-
-        elif plan.intent == IntentType.TLDV_ONLY and plan.tldv_task:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Accessing TLDV Records...'})}\n\n"
-            agent_result = await tldv_agent.run(f"{temporal_context}{plan.tldv_task}", message_history=agent_histories["tldv"])
-            agent_histories["tldv"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'TLDV operation completed'})}\n\n"
-            
-        elif plan.intent == IntentType.EMAIL_AND_SQL and plan.sql_task and plan.email_task:
-            # Step 1: SQL
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Step 1: Generating SQL query...'})}\n\n"
-            sql_result = await sql_agent.run(f"{temporal_context}{plan.sql_task}", message_history=agent_histories["sql"])
-            agent_histories["sql"] = sql_result.new_messages()
-            
-            query = sql_result.output.sqlquery
-            explanation = sql_result.output.explanation or "No explanation provided"
-            
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Step 2: Executing database query...'})}\n\n"
-            query_result = await mysql_mcp.direct_call_tool(
-                name="execute_query",
-                args={"query": query, "database": "Salesforce", "read_only": True}
-            )
-            formatted_results = format_query_results(query_result)
-            
-            # Step 2: Email with SQL results
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Step 3: Preparing email with results...'})}\n\n"
-            enriched_task = f"{plan.email_task}\n\nSQL Query: {query}\n\nExplanation: {explanation}\n\nDatabase Query Results:\n{formatted_results}"
-            email_result = await email_agent.run(f"{temporal_context}{enriched_task}", message_history=agent_histories["email"])
-            agent_histories["email"] = email_result.new_messages()
-            
-            # Create combined result with SQL data
-            agent_result = type('obj', (object,), {
-                'output': email_result.output,
-                'sql_data': query_result if query_result.get('success') else None
-            })()
-            sql_data = query_result if query_result.get('success') else None
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Multi-agent workflow completed'})}\n\n"
-            
-        else:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Processing your question...'})}\n\n"
-            agent_result = await general_agent.run(f"{temporal_context}{user_input}", message_history=agent_histories["general"])
-            agent_histories["general"] = agent_result.new_messages()
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Response generated'})}\n\n"
-            
-        # Update intent agent history with FULL conversation (user query + assistant response)
-        agent_histories["intent"] = intent_result.new_messages()
-        if agent_result:
-            # Manually append the assistant's response to intent history
-            from pydantic_ai.messages import ModelResponse, TextPart
-            assistant_msg = ModelResponse(
-                parts=[TextPart(content=str(agent_result.output))]
-            )
-            agent_histories["intent"].append(assistant_msg)
+            # Handle SQL specific UI
+            if hasattr(result.output, 'sqlquery'):
+                query = result.output.sqlquery
+                explanation = getattr(result.output, 'explanation', 'SQL Query')
+                database = getattr(result.output, 'database', None) or "Salesforce"
+                
+                yield f"data: {json.dumps({'type': 'sql_query', 'query': query, 'explanation': explanation})}\n\n"
+                yield f"data: {json.dumps({'type': 'status', 'content': f'Executing database query on {database}...'})}\n\n"
+                
+                query_result = await mysql_mcp.direct_call_tool(
+                    name="execute_query",
+                    args={"query": query, "database": database, "read_only": True}
+                )
+                formatted_results = format_query_results(query_result)
+                step_results[-1] += f"\n\nResults:\n{formatted_results}"
+                if query_result.get('success'):
+                    sql_data = query_result
+                    sql_data['executed_query'] = query
+                    sql_data['executed_explanation'] = explanation
+                    
+        # 3. Final Synthesis
+        yield f"data: {json.dumps({'type': 'status', 'content': 'Synthesizing final response...'})}\n\n"
         
-        # Keep only last 10 turns (20 messages) in intent history
-        agent_histories["intent"] = keep_last_n_turns(agent_histories["intent"], n_turns=10)
-            
-        # Send final result
+        final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
+        final_context += f"\n\nInstruction: {plan.final_response_instruction}"
+        
+        final_result = await agents.general_agent.run(final_context)
+        final_response_text = str(final_result.output)
+        
+
+        # 4. Update History
+        conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        conversation_history = keep_last_n_turns(conversation_history)
+        
         response_data = {
-            "intent": plan.intent.value,
-            "response": str(agent_result.output),
+            "intent": "multi_agent",
+            "response": final_response_text,
             "success": True,
             "sql_data": sql_data
         }
@@ -444,18 +328,8 @@ async def stream_query(query: str):
 @app.post("/reset-history")
 async def reset_history(session_id: str = "default"):
     """Reset conversation history for a session"""
-    global agent_histories
-    agent_histories = {
-        "email": [],
-        "sql": [],
-        "drive": [],
-        "calendar": [],
-        "calendar": [],
-        "docs": [],
-        "tldv": [],
-        "general": [],
-        "intent": []
-    }
+    global conversation_history
+    conversation_history = []
     logger.info(f"🔄 Reset conversation history for session: {session_id}")
     return {"status": "success", "message": "Conversation history reset"}
 

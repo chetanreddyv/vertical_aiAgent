@@ -25,48 +25,47 @@ for var in required_vars:
         logger.error(f"Missing required environment variable: {var}")
         # We don't raise here to allow import, but initialization might fail
 
-# Intent handling extended for Google Workspace services
-class IntentType(str, Enum):
-    EMAIL_ONLY = "email_only"
-    SQL_ONLY = "sql_only"
-    EMAIL_AND_SQL = "email_and_sql"
-    DRIVE_ONLY = "drive_only"
-    CALENDAR_ONLY = "calendar_only"
-    DOCS_ONLY = "docs_only"
-    TLDV_ONLY = "tldv_only"
+# Manager Agent Models
+class AgentSelection(str, Enum):
+    EMAIL = "email"
+    SQL = "sql"
+    DRIVE = "drive"
+    CALENDAR = "calendar"
+    DOCS = "docs"
+    TLDV = "tldv"
     GENERAL = "general"
 
+class Step(BaseModel):
+    agent: AgentSelection = Field(..., description="The specialist agent to perform this step.")
+    instruction: str = Field(..., description="Precise, self-contained instruction for the agent. Must include all necessary context from previous steps.")
+    reasoning: str = Field(..., description="Why this step is necessary and how it contributes to the final goal.")
+
 class ExecutionPlan(BaseModel):
-    intent: IntentType
-    rewritten_query: str = Field(..., description="Rewritten user query that is specific, actionable, and context-rich.")
-    email_task: Optional[str]
-    sql_task: Optional[str]
-    drive_task: Optional[str] = None
-    calendar_task: Optional[str] = None
-    docs_task: Optional[str] = None
-    tldv_task: Optional[str] = None
+    steps: list[Step] = Field(..., description="Ordered list of steps to execute the user's request.")
+    rewritten_intent: str = Field(..., description="A refined, self-contained summary of the user's request. e.g., 'Schedule a follow-up meeting with the client for next Tuesday at 10 AM'.")
+    final_response_instruction: str = Field(..., description="Instruction on how to synthesize the final execution results into a response for the user.")
 
 class sql(BaseModel):
     sqlquery: str = Field(..., description="The SQL query to execute.")
     explanation: Optional[str] = Field(None, description="A brief explanation of what the query does.")
+    database: Optional[str] = Field(None, description="The specific database to query. Defaults to Salesforce if not specified.")
 
 # -------- MCP Server Initializations --------
 
-# MySQL (unchanged)
+# MySQL
 mysql_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["sql_server.py"],
     env={
-        "DB_HOST": os.getenv("DB_HOST"),
+        "DB_HOST": os.getenv("DB_HOST", "localhost"),
         "DB_PORT": os.getenv("DB_PORT", "3306"),
-        "DB_USER": os.getenv("DB_USER"),
-        "DB_PASSWORD": os.getenv("DB_PASSWORD"),
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+        "DB_USER": os.getenv("DB_USER", "root"),
+        "DB_PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
         "CUSTOM_SQL_CONTEXT": os.getenv("CUSTOM_SQL_CONTEXT", ""),
     },
     timeout=60,
 )
-
 
 # Custom Calendar MCP
 calendar_mcp = MCPServerStdio(
@@ -88,7 +87,6 @@ drive_mcp = MCPServerStdio(
     }
 )
 
-
 # TLDV MCP (Docker)
 tldv_mcp = MCPServerStdio(
     "docker",
@@ -103,16 +101,15 @@ tldv_mcp = MCPServerStdio(
     ]
 )
 
-
 # RAG MCP (Postgres Vector)
 rag_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["rag_server.py"],
     env={
         "PG_HOST": os.getenv("PG_HOST", "localhost"),
-        "PG_PORT": os.getenv("PG_PORT", "5435"),
-        "PG_USER": os.getenv("PG_USER", "admin"),
-        "PG_PASSWORD": os.getenv("PG_PASSWORD", "password"),
+        "PG_PORT": os.getenv("PG_PORT", "5434"),
+        "PG_USER": os.getenv("PG_USER", "chetan"),
+        "PG_PASSWORD": os.getenv("PG_PASSWORD", ""),
         "PG_DB": os.getenv("PG_DB", "vectordb"),
         "PG_SCHEMA": os.getenv("PG_SCHEMA", "app_data"),
         "PG_TABLE_NAME": os.getenv("PG_TABLE_NAME", "meeting_embeddings"),
@@ -122,31 +119,38 @@ rag_mcp = MCPServerStdio(
 )
 
 
-# -------- Agent Definitions (all use workspace MCP except SQL) -------
-
-intent_agent = Agent(
+manager_agent = Agent(
     "openai:gpt-4o-mini",
     output_type=ExecutionPlan,
     system_prompt=(
-        "You are an intent classification and query refinement expert. Your goal is to understand the user's request, "
-        "classify it into the correct intent, and rewrite the query to be precise and actionable for the specific agent.\n\n"
-        "Classification Options:\n"
-        "- 'email_only': Gmail operations (send, read, search emails)\n"
-        "- 'sql_only': Database queries or data retrieval from MySQL\n"
-        "- 'email_and_sql': Combined workflow (query database, then email results)\n"
-        "- 'drive_only': Google Drive operations (upload, download, search files)\n"
-        "- 'calendar_only': Google Calendar: Schedule/Create/Update events & Google Meet links\n"
-        "- 'docs_only': Google Docs operations (create, edit documents)\n"
-        "- 'tldv_only': TLDV: Retrieve transcripts, summaries, and highlights from PAST meetings\n"
-        "- 'general': General questions or conversations not requiring tools\n\n"
-        "Instructions:\n"
-        "1. Analyze the user's input to determine the primary intent.\n"
-        "2. Rewrite the user's query in the 'rewritten_query' field. This should be a clear, third-person statement of what the user wants (e.g., 'Search for the budget file in Drive' instead of 'find the budget file').\n"
-        "3. Populate the specific task field corresponding to the chosen intent (e.g., 'email_task' for 'email_only').\n"
-        "   - The task description in the specific field should be DETAILED and SELF-CONTAINED. \n"
-        "   - Include all necessary context, parameters, and constraints.\n"
-        "   - For 'email_and_sql', populate BOTH 'sql_task' and 'email_task'.\n"
-        "   - Leave unrelated task fields null."
+        "You are the Manager Agent, an intelligent orchestrator for a multi-agent system.\n"
+        "Your goal is to break down user requests into a sequence of actionable steps executed by specialist agents.\n\n"
+        "AVAILABLE AGENTS:\n"
+        "- 'tldv': SOURCE OF TRUTH for PAST meetings. Use for transcripts, summaries, 'what did X say', 'meeting from last week'.\n"
+        "   - Capabilities: Advanced hybrid search with date/speaker/similarity filtering.\n"
+        "   - IMPORTANT: Extract temporal context (dates, 'last week') and speaker names from user queries.\n"
+        "   - Pass contextual hints in instructions (e.g., 'Search for budget discussions from last week').\n"
+        "- 'calendar': Future scheduling, availability, and specific event metadata (time/location/participants).\n"
+        "   - Capabilities: Create/Update events, Check availability.\n"
+        "- 'email': Sending and reading emails (Gmail).\n"
+        "- 'sql': Querying the business database (Salesforce data).\n"
+        "- 'drive': File management (Drive) and reading file content.\n"
+        "- 'docs': Creating and editing Google Docs.\n"
+        "- 'general': Simple conversational, logic, or math tasks not requiring tools.\n\n"
+        "RULES:\n"
+        "1. ANALYZE context: You have access to the full conversation history. Resolve references like 'that meeting' or 'the file' based on previous turns.\n"
+        "2. CHAIN steps: If a task requires output from one agent to be used by another (e.g., 'email the meeting summary'), create sequential steps.\n"
+        "   - Step 1: tldv ('Summarize the meeting...')\n"
+        "   - Step 2: email ('Send an email... Content: [Wait for Step 1 result]')\n"
+        "   - Note: You define the plan UPFRONT. In the 'instruction' for Step 2, clearly state that it depends on the result of Step 1.\n"
+        "3. TLDV vs CALENDAR: \n"
+        "   - If the user asks about CONTENT (what was said, summaries, topics) -> TLDV.\n"
+        "   - If the user asks about LOGISTICS (when is it, invite who) -> CALENDAR.\n"
+        "   - If ambiguous (e.g., 'meeting yesterday'), defaulting to TLDV is usually safer for content queries.\n"
+        "4. TLDV INSTRUCTIONS: Include temporal and speaker context explicitly:\n"
+        "   - User: 'What did Sarah say last week?' -> Step instruction: 'Search for Sarah's comments from the past week'\n"
+        "   - User: 'Meeting about budget yesterday' -> Step instruction: 'Find budget discussions from yesterday'\n"
+        "   - This helps the TLDV agent apply appropriate filters for better accuracy."
     )
 )
 
@@ -234,15 +238,50 @@ docs_agent = Agent(
 tldv_agent = Agent(
     "openai:gpt-4o-mini",
     system_prompt=(
-        "You are a TLDV Meeting Notetaker assistant.\n\n"
-        "Capabilities:\n"
-        "- Search across all past meeting transcripts for specific topics, context, and decisions (RAG).\n\n"
-        "Guidelines:\n"
-        "- You have access to a semantic search tool 'search_meetings'.\n"
-        "- ALWAYS use 'search_meetings' to find information about past meetings.\n"
-        "- The search results include meeting content, metadata (speakers, time), and a 'meeting_id'.\n"
-        "- Use the metadata to provide context (e.g., 'In the meeting on [date]...').\n"
-        "- This tool is NOT for scheduling new meetings (use Calendar agent for that).\n"
+        "You are a TLDV Meeting Notetaker assistant with advanced search capabilities.\n\n"
+        "## Core Capabilities\n"
+        "- Search across all past meeting transcripts using hybrid semantic + keyword search\n"
+        "- Filter by date ranges, speakers, and specific meetings\n"
+        "- Retrieve the most relevant context with high accuracy\n\n"
+        "## Search Tool Usage\n"
+        "You have access to 'search_meetings' with advanced parameters:\n\n"
+        "**Key Parameters:**\n"
+        "- `query` (required): Natural language question or topic\n"
+        "- `min_similarity` (default: 0.2): Relevance threshold. Use 0.2 for broad searches.\n"
+        "- `include_context` (default: False): Set to `True` for complex queries where understanding the flow of conversation (previous/next turns) is critical.\n\n"
+        "**Filtering Parameters:**\n"
+        "- `start_date` / `end_date`: ISO format (YYYY-MM-DD)\n"
+        "- `speaker`: Partial match (e.g. 'Sarah')\n"
+        "- `meeting_id`: Specific meeting scope\n\n"
+        "**Quality Parameters:**\n"
+        "- `deduplicate` (default: True): Prevents info overload by limiting chunks per meeting\n"
+        "- `max_results_per_meeting` (default: 3): Max chunks from same meeting\n\n"
+        "## Best Practices\n"
+        "1. **Use filters proactively**: If user mentions time ('last month'), dates, or speakers, USE the filters.\n"
+        "2. **Context Matters**: If the user asks a complex question like 'How did they reach that conclusion?', use `search_meetings(..., include_context=True)`.\n"
+        "3. **Keyword-rich queries**: For decisions/action items, use keywords like 'decided', 'action item', 'agreed' in your query.\n"
+        "4. **Adjust similarity threshold**: \n"
+        "   - For specific facts/names: `min_similarity=0.4`\n"
+        "   - Default is `0.2`. RRF fusion is automatic.\n"
+        "5. **Interpret results carefully**:\n"
+        "   - **Score 0.2 - 0.35**: Potential match. Review content carefully.\n"
+        "   - **Score > 0.35**: High confidence match.\n"
+        "   - **Keyword Rank > 0.1**: Strong keyword match.\n"
+        "   - Use `citation_label` for referencing sources.\n"
+        "   - Use `metadata` (date, speaker, meeting title) to add context\n"
+        "6. **Citation**: Always cite which meeting(s) information came from using metadata.\n"
+        "7. **Multi-step searches**: If first search is too narrow, try broader query or lower threshold.\n\n"
+        "## Response Format\n"
+        "When presenting results:\n"
+        "- Start with direct answer\n"
+        "- Cite source: 'According to the [meeting title] on [date]...'\n"
+        "- If multiple meetings: Group by meeting or chronologically\n"
+        "- Include speaker attribution when relevant\n"
+        "- If low confidence (similarity < 0.6): 'Based on possibly related discussions...'\n\n"
+        "## Important Distinctions\n"
+        "- You handle PAST meeting content (transcripts, what was said)\n"
+        "- For FUTURE meetings (scheduling, invites) → defer to Calendar agent\n"
+        "- For meeting recordings/files → defer to Drive agent\n"
     ),
     mcp_servers=[rag_mcp]
 )
@@ -250,7 +289,7 @@ tldv_agent = Agent(
 sql_agent = Agent(
     "openai:gpt-4o-mini",
     output_type=sql,
-    system_prompt="PLACEHOLDER",  # Updated later
+    system_prompt="PLACEHOLDER", 
     mcp_servers=[mysql_mcp]
 )
 
@@ -284,13 +323,13 @@ async def initialize_agents():
         logger.error(f"Failed to read {sql_context_file}: {e}")
         
 
-
     # Fetch schema
     formatted_schema = "Schema unavailable."
     try:
+        # We now fetch ALL schemas (utils.py filters the system ones)
         schema_info_result = await mysql_mcp.direct_call_tool(
             name="schema_info", 
-            args={"database": "Salesforce"}
+            args={} 
         )
         if schema_info_result.get("success"):
             formatted_schema = format_schema_rows(schema_info_result["schema"])
@@ -298,31 +337,52 @@ async def initialize_agents():
         logger.error(f"Error fetching schema: {e}", exc_info=True)
 
     # Update SQL agent prompt
-    sql_agent.system_prompt = f"""You are an expert SQL query generator. Your task is to convert natural language questions into valid SQL queries.
+    sql_agent.system_prompt = f"""You are an Expert MySQL Database Analyst and Data Scientist. 
+Your goal is to answer user questions by generating precise, efficient, and read-only SQL queries.
 
-IMPORTANT GUIDELINES:
-1. Generate only SELECT, SHOW, DESCRIBE, or EXPLAIN queries (read-only mode)
-2. For listing tables, use: SHOW TABLES
-3. For listing databases, use: SHOW DATABASES  
-4. For table structure, use: DESCRIBE table_name or SHOW COLUMNS FROM table_name
-5. Always use proper SQL syntax
-6. Use appropriate JOINs when multiple tables are involved
-7. Add WHERE clauses for filtering when relevant
-8. Use LIMIT clauses to prevent overwhelming results (default LIMIT 100 unless specified)
-9. Return column names that are meaningful
-10. NEVER generate queries that start with anything other than SELECT, SHOW, DESCRIBE, DESC, or EXPLAIN
+## 🌍 Database Environment
+You are connected to a MySQL instance containing multiple databases.
+- **PRIMARY DATABASE**: `Salesforce` (Contains core business data: Leads, Opportunities, Accounts, Contacts).
+- **Other Databases**: You have access to other user databases listed in the schema below.
+- **System Databases**: `information_schema` is available for metadata queries (tables, columns, etc.).
 
-QUERY EXAMPLES FOR COMMON REQUESTS:
-- "What tables are in the database?" → SHOW TABLES
-- "List all databases" → SHOW DATABASES
-- "What columns are in table X?" → SHOW COLUMNS FROM X
-- "Show me data from table X" → SELECT * FROM X LIMIT 10
+## 🧠 Capabilities & Rules
+1. **Target the Right Database**:
+   - Usage: If the query is about business data, default to `Salesforce`. 
+   - Usage: If the user explicitly mentions another DB (e.g., "in the leads_db"), use that.
+   - **CRITICAL**: You must set the `database` field in your output to match the target.
 
-DB SCHEMA:
+2. **Cross-Database Queries**:
+   - You can JOIN tables across databases using `database.table` syntax.
+   - Example: `SELECT a.Name FROM Salesforce.Account a JOIN leads_db.ExternalLeads e ON ...`
+
+3. **Schema & Metadata**:
+   - To find tables/columns if you are unsure: Query `information_schema`.
+   - List all tables: `SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('mysql', 'sys', 'performance_schema', 'information_schema')`
+
+4. **Safety & Performance**:
+   - **READ ONLY**: Only SELECT, SHOW, DESCRIBE, EXPLAIN are allowed.
+   - **LIMIT**: Always use `LIMIT 100` (or less) unless specific aggregation is requested.
+   - **NO WILD**: Avoid `SELECT *` on large tables if not needed. Select specific columns.
+
+## 🛠️ Output Format
+You must return a structured JSON object (handled by the tool):
+- `sqlquery`: The valid MySQL query.
+- `explanation`: A concise, professional explanation of what the query retrieves.
+- `database`: The target database name (e.g., 'Salesforce', 'mysql' for system info).
+
+## 📚 Schema Context
 {formatted_schema}
-CONTEXT:
+
+## 📝 Business Context & Definitions
 {custom_sql_context}
-Provide a valid query and brief explanation. Queries should be written using context and schema provided."""
+
+## 💡 Examples
+- "List all databases" -> `SHOW DATABASES` (database='mysql')
+- "Show all tables" -> `SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES...` (database='mysql')
+- "Find the top 5 opportunities" -> `SELECT Name, Amount FROM Opportunity ORDER BY Amount DESC LIMIT 5` (database='Salesforce')
+- "Join Salesforce Accounts with External Leads" -> `SELECT ... FROM Salesforce.Account a JOIN other_db.Leads l ...` (database='Salesforce')
+"""
 
     return formatted_schema
 

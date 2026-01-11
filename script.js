@@ -19,16 +19,38 @@ class ChatApp {
         this.newChatBtn.addEventListener('click', () => this.newChat());
         this.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
 
+        // Mobile Menu Toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', () => {
+                const sidebar = document.querySelector('.sidebar');
+                sidebar.classList.toggle('hidden');
+                sidebar.classList.toggle('absolute');
+                sidebar.classList.toggle('z-50');
+                sidebar.classList.toggle('h-full');
+            });
+        }
+
         // Auto-resize textarea
         this.userInput.addEventListener('input', () => this.autoResize());
 
         // Suggestion chips
-        document.querySelectorAll('.suggestion-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                const query = e.target.dataset.query;
-                this.userInput.value = query;
-                this.userInput.focus();
-            });
+        // Event delegation for Suggestion chips
+        document.addEventListener('click', (e) => {
+            const chip = e.target.closest('.suggestion-chip');
+            if (chip) {
+                const query = chip.dataset.query;
+                if (query) {
+                    this.userInput.value = query;
+                    this.userInput.focus();
+                }
+            }
+
+            const dismissBtn = e.target.closest('#dismissSuggestionsBtn');
+            if (dismissBtn) {
+                const suggestions = dismissBtn.closest('.input-container')?.querySelector('.suggestions') || document.querySelector('.absolute.bottom-0 .suggestions');
+                if (suggestions) suggestions.style.display = 'none';
+            }
         });
 
         // Check backend health
@@ -63,11 +85,13 @@ class ChatApp {
         const query = this.userInput.value.trim();
         if (!query) return;
 
-        // Clear welcome message if it exists
-        const welcomeMessage = document.querySelector('.welcome-message');
-        if (welcomeMessage) {
-            welcomeMessage.remove();
+        // Hide welcome message
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        if (welcomeScreen) {
+            welcomeScreen.classList.add('hidden');
         }
+
+        // We no longer hide suggestions here, as requested.
 
         // Add user message
         this.addMessage('user', query);
@@ -269,11 +293,18 @@ class ChatApp {
             let explanation = '';
             let query = '';
 
-            for (const part of parts) {
-                if (part.startsWith('📝 Explanation:')) {
-                    explanation = part;
-                } else if (part.startsWith('🔍 Query:')) {
-                    query = part;
+            // Prefer data from backend if available
+            if (sqlData.executed_explanation && sqlData.executed_query) {
+                explanation = `📝 Explanation: ${sqlData.executed_explanation}`;
+                query = `🔍 Query:\n\`\`\`sql\n${sqlData.executed_query}\n\`\`\``;
+            } else {
+                // Fallback to parsing text
+                for (const part of parts) {
+                    if (part.startsWith('📝 Explanation:')) {
+                        explanation = part;
+                    } else if (part.startsWith('🔍 Query:')) {
+                        query = part;
+                    }
                 }
             }
 
@@ -409,6 +440,10 @@ class ChatApp {
 
                 htmlLines.push(`<li>${this.parseInline(content)}</li>`);
             } else {
+                if (inList && line.trim() === '') {
+                    continue;
+                }
+
                 // Not a list item
                 if (inList) {
                     htmlLines.push(listType === 'ul' ? '</ul>' : '</ol>');
@@ -492,36 +527,19 @@ class ChatApp {
 
     async newChat() {
         if (confirm('Start a new conversation? This will clear the current chat.')) {
-            this.messagesContainer.innerHTML = `
-                <div class="welcome-message">
-                    <div class="welcome-icon">✨</div>
-                    <h2>Welcome to AI Agent Assistant</h2>
-                    <p>I can help you with email, database queries, file management, calendar scheduling, and more.</p>
-                    <div class="suggestions">
-                        <button class="suggestion-chip" data-query="List my Google Drive files">
-                            📁 List Drive files
-                        </button>
-                        <button class="suggestion-chip" data-query="Upload a file to Google Drive">
-                            📤 Upload to Drive
-                        </button>
-                        <button class="suggestion-chip" data-query="Create a folder in Google Drive">
-                            📂 Create Drive folder
-                        </button>
-                        <button class="suggestion-chip" data-query="List my past meetings from last week">
-                            🗒️ List past meetings
-                        </button>
-                    </div>
-                </div>
-            `;
+            // Remove all existing messages
+            const messages = this.messagesContainer.querySelectorAll('.message');
+            messages.forEach(msg => msg.remove());
 
-            // Re-attach suggestion listeners
-            document.querySelectorAll('.suggestion-chip').forEach(chip => {
-                chip.addEventListener('click', (e) => {
-                    const query = e.target.dataset.query;
-                    this.userInput.value = query;
-                    this.userInput.focus();
-                });
-            });
+            // Show welcome screen
+            const welcomeScreen = document.getElementById('welcomeScreen');
+            if (welcomeScreen) {
+                welcomeScreen.classList.remove('hidden');
+            }
+
+            // Clear input
+            this.userInput.value = '';
+            this.userInput.style.height = 'auto';
         }
     }
 

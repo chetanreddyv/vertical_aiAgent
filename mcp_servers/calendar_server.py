@@ -9,16 +9,26 @@ from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import os
 from typing import List
+import logging
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
+logger = logging.getLogger("calendar_server")
 
 # If modifying these scopes, delete the file token.json.
 # Using unified scopes for all Google services (managed by auth_google.py)
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/documents'
+    'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.send',
 ]
 
 mcp = FastMCP("Google Calendar Server")
@@ -59,6 +69,7 @@ def list_events(max_results: int = 10) -> str:
     Args:
         max_results: Maximum number of events to return (default: 10)
     """
+    logger.info(f"🛠️ Tool Called: list_events(max_results={max_results})")
     try:
         service = get_calendar_service()
         now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
@@ -77,8 +88,10 @@ def list_events(max_results: int = 10) -> str:
             start = event['start'].get('dateTime', event['start'].get('date'))
             result += f"- {start}: {event['summary']}\n"
             
+        logger.info(f"✅ Tool Complete: list_events")
         return result
     except Exception as e:
+        logger.error(f"❌ Tool Error: list_events - {str(e)}")
         return f"Error listing events: {str(e)}"
 
 @mcp.tool()
@@ -91,6 +104,7 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
         end_time: End time in ISO format
         description: Optional description of the event
     """
+    logger.info(f"🛠️ Tool Called: create_event(summary='{summary}', start='{start_time}')")
     try:
         service = get_calendar_service()
         
@@ -108,8 +122,10 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
         }
 
         event = service.events().insert(calendarId='primary', body=event).execute()
+        logger.info(f"✅ Tool Complete: create_event")
         return f"Event created: {event.get('htmlLink')}"
     except Exception as e:
+        logger.error(f"❌ Tool Error: create_event - {str(e)}")
         return f"Error creating event: {str(e)}"
 
 @mcp.tool()

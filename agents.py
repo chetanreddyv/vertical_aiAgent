@@ -5,13 +5,18 @@ from enum import Enum
 from typing import Optional
 import os
 import logging
+import time
 from dotenv import load_dotenv
 from utils import format_schema_rows
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Required environment variables including Google OAuth
 required_vars = [
@@ -55,7 +60,7 @@ class sql(BaseModel):
 # MySQL
 mysql_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
-    args=["sql_server.py"],
+    args=["mcp_servers/sql_server.py"],
     env={
         "DB_HOST": os.getenv("DB_HOST", "localhost"),
         "DB_PORT": os.getenv("DB_PORT", "3306"),
@@ -67,10 +72,20 @@ mysql_mcp = MCPServerStdio(
     timeout=60,
 )
 
+# Custom Email MCP
+email_mcp = MCPServerStdio(
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    args=["mcp_servers/email_server.py"],
+    env={
+        "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
+        "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+    }
+)
+
 # Custom Calendar MCP
 calendar_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
-    args=["calendar_server.py"],
+    args=["mcp_servers/calendar_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
         "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
@@ -80,7 +95,7 @@ calendar_mcp = MCPServerStdio(
 # Custom Drive MCP
 drive_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
-    args=["drive_server.py"],
+    args=["mcp_servers/drive_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
         "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
@@ -104,7 +119,7 @@ tldv_mcp = MCPServerStdio(
 # RAG MCP (Postgres Vector)
 rag_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
-    args=["rag_server.py"],
+    args=["mcp_servers/rag_server.py"],
     env={
         "PG_HOST": os.getenv("PG_HOST", "localhost"),
         "PG_PORT": os.getenv("PG_PORT", "5434"),
@@ -169,7 +184,8 @@ email_agent = Agent(
         "- Use appropriate filters to find relevant emails\n"
         "- Format responses in a clear, readable manner\n"
         "- CRITICAL: If asked to read, summarize, or reply to an email, YOU MUST FIRST search for the email to get its ID/Thread ID. Do not guess IDs."
-    )
+    ),
+    mcp_servers=[email_mcp]
 )
 
 drive_agent = Agent(
@@ -309,7 +325,8 @@ general_agent = Agent(
 
 async def initialize_agents():
     """Initialize agents with dynamic configuration (schema, context)"""
-    logger.info("Initializing agents...")
+    logger.info("🎬 Starting Agents Initialization...")
+    init_start = time.time()
     
     # Load SQL context from file
     sql_context_file = "sql_context.md"
@@ -318,9 +335,9 @@ async def initialize_agents():
         if os.path.exists(sql_context_file):
             with open(sql_context_file, "r") as f:
                 custom_sql_context = f.read()
-            logger.info(f"Loaded SQL context from {sql_context_file}")
+            logger.info(f"📄 Loaded SQL context from {sql_context_file}")
     except Exception as e:
-        logger.error(f"Failed to read {sql_context_file}: {e}")
+        logger.error(f"❌ Failed to read {sql_context_file}: {e}")
         
 
     # Fetch schema
@@ -333,8 +350,9 @@ async def initialize_agents():
         )
         if schema_info_result.get("success"):
             formatted_schema = format_schema_rows(schema_info_result["schema"])
+            logger.info(f"📊 Schema loaded successfully ({len(schema_info_result['schema'])} columns)")
     except Exception as e:
-        logger.error(f"Error fetching schema: {e}", exc_info=True)
+        logger.error(f"❌ Error fetching schema: {e}", exc_info=True)
 
     # Update SQL agent prompt
     sql_agent.system_prompt = f"""You are an Expert MySQL Database Analyst and Data Scientist. 
@@ -384,5 +402,7 @@ You must return a structured JSON object (handled by the tool):
 - "Join Salesforce Accounts with External Leads" -> `SELECT ... FROM Salesforce.Account a JOIN other_db.Leads l ...` (database='Salesforce')
 """
 
+    init_duration = time.time() - init_start
+    logger.info(f"✅ Agents Initialization Complete ({init_duration:.2f}s)")
     return formatted_schema
 

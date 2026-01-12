@@ -12,15 +12,25 @@ import asyncio
 import zipfile
 import xml.etree.ElementTree as ET
 from typing import Optional, List, Tuple, Dict, Any
+import logging
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
+logger = logging.getLogger("drive_server")
 
 # Scopes for Google Drive
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/documents'
+    'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.send',
 ]
 
 
@@ -191,6 +201,7 @@ def list_files(max_results: int = 10, folder_id: str = None) -> str:
         max_results: Maximum number of files to return (default: 10)
         folder_id: Optional folder ID to list files from (default: all files)
     """
+    logger.info(f"🛠️ Tool Called: list_files(max_results={max_results}, folder_id='{folder_id}')")
     try:
         service = get_drive_service()
         
@@ -220,8 +231,10 @@ def list_files(max_results: int = 10, folder_id: str = None) -> str:
             result += f"  Modified: {file.get('modifiedTime', 'N/A')}\n"
             result += f"  Link: {file.get('webViewLink', 'N/A')}\n"
         
+        logger.info(f"✅ Tool Complete: list_files")
         return result
     except Exception as e:
+        logger.error(f"❌ Tool Error: list_files - {str(e)}")
         return f"Error listing files: {str(e)}"
 
 @mcp.tool()
@@ -243,6 +256,7 @@ async def search_files(
         include_items_from_all_drives (bool): Whether shared drive items should be included in results. Defaults to True.
         corpora (Optional[str]): Bodies of items to query (e.g., 'user', 'domain', 'drive', 'allDrives').
     """
+    logger.info(f"🛠️ Tool Called: search_files(query='{query}', max_results={max_results})")
     try:
         service = get_drive_service()
         
@@ -304,8 +318,10 @@ async def search_files(
             result += f"- {file_type}: {file['name']} (ID: {file['id']}, Size: {size})\n"
             result += f"  Link: {file.get('webViewLink', 'N/A')}\n"
         
+        logger.info(f"✅ Tool Complete: search_files")
         return result
     except Exception as e:
+        logger.error(f"❌ Tool Error: search_files - {str(e)}")
         return f"Error searching files: {str(e)}"
 
 @mcp.tool()
@@ -316,6 +332,7 @@ async def get_file_content(file_id: str) -> str:
     Args:
         file_id: Drive file ID or name.
     """
+    logger.info(f"🛠️ Tool Called: get_file_content(file_id='{file_id}')")
     try:
         service = get_drive_service()
         
@@ -385,8 +402,10 @@ async def get_file_content(file_id: str) -> str:
             f'File: "{file_name}" (ID: {file_id}, Type: {mime_type})\n'
             f'Link: {file_metadata.get("webViewLink", "#")}\n\n--- CONTENT ---\n'
         )
+        logger.info(f"✅ Tool Complete: get_file_content")
         return header + body_text
     except Exception as e:
+        logger.error(f"❌ Tool Error: get_file_content - {str(e)}")
         return f"Error getting file content: {str(e)}"
 
 @mcp.tool()

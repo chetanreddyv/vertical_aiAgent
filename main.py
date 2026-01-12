@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 import json
+import time
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
@@ -125,27 +126,32 @@ async def process_query(request: QueryRequest):
     Process a user query through the Manager Agent orchestration system
     """
     global conversation_history
+    start_time = time.time()
     try:
         user_input = request.query.strip()
         if not user_input:
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
         status_updates = []
-        logger.info(f"📥 Received query: '{user_input[:50]}...'")
+        logger.info(f"--- 📥 START PROCESSING QUERY ---")
+        logger.info(f"Query: '{user_input}'")
         
         status_updates.append("Analyzing your request...")
-        logger.info("🔍 Manager Agent: Planning execution steps...")
+        
+        # 1. Manager Agent Plan
+        logger.info("🔍 Manager Agent: Starting Planning...")
+        manager_start = time.time()
         
         temporal_context = get_temporal_context()
-        
-        # 1. Manager Agent creates the Execution Plan
-        # We pass the full conversation history to the manager so it has context
         from agents import manager_agent
         plan_result = await manager_agent.run(
             f"{temporal_context}{user_input}", 
             message_history=conversation_history
         )
         plan = plan_result.output
+        manager_duration = time.time() - manager_start
+        logger.info(f"✅ Manager Agent: Planning Complete ({manager_duration:.2f}s)")
+        logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
         
         status_updates.append("Plan created with steps: " + ", ".join([str(s.agent.value).upper() for s in plan.steps]))
         
@@ -156,7 +162,10 @@ async def process_query(request: QueryRequest):
         for i, step in enumerate(plan.steps):
             agent_name = step.agent.value
             status_updates.append(f"Step {i+1}: Executing {agent_name.upper()} Agent...")
-            logger.info(f"🔄 Step {i+1}: {agent_name} - {step.instruction}")
+            
+            logger.info(f"🔄 Step {i+1} START: {agent_name.upper()}")
+            logger.info(f"Instruction: {step.instruction}")
+            step_start = time.time()
             
             # Context for the specific step
             previous_steps_context = ""
@@ -164,24 +173,33 @@ async def process_query(request: QueryRequest):
                 previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
             
             agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
-            
             agent = get_agent_by_name(agent_name)
             
-            # Run the agent (worker agents start fresh or with minimal history to avoid confusion)
+            # Run the agent
             result = await agent.run(agent_input)
             
             step_output = str(result.output)
+            step_duration = time.time() - step_start
+            logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")
+            logger.info(f"📄 Result from {agent_name.upper()}: {step_output[:500]}..." if len(step_output) > 500 else f"📄 Result from {agent_name.upper()}: {step_output}")
+            
             step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
             
-            # Capture SQL data if present (special case for UI rendering)
+            # Capture SQL data if present
             if hasattr(result.output, 'sqlquery'):
                 query = result.output.sqlquery
                 database = getattr(result.output, 'database', None) or "Salesforce"
                 status_updates.append(f"Executing database query on {database}...")
+                
+                logger.info(f"🗄️ Executing SQL on {database}...")
+                sql_start = time.time()
                 query_result = await mysql_mcp.direct_call_tool(
                     name="execute_query",
                     args={"query": query, "database": database, "read_only": True}
                 )
+                sql_duration = time.time() - sql_start
+                logger.info(f"✅ SQL Execution Complete ({sql_duration:.2f}s)")
+                
                 formatted_results = format_query_results(query_result)
                 step_results[-1] += f"\n\nResults:\n{formatted_results}"
                 if query_result.get('success'):
@@ -190,16 +208,18 @@ async def process_query(request: QueryRequest):
                     sql_data['executed_explanation'] = getattr(result.output, 'explanation', 'SQL Query')
 
         # 3. Final Synthesis
-        start_final = " Synthesizing final response..."
-        status_updates.append(start_final)
+        status_updates.append("Synthesizing final response...")
+        logger.info("🧠 Synthesis: Generating final response...")
+        synthesis_start = time.time()
         
-
-        # We use the General agent to synthesize the final answer
         final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
         final_context += f"\n\nInstruction: {plan.final_response_instruction}"
         
         final_result = await agents.general_agent.run(final_context)
         final_response_text = str(final_result.output)
+        synthesis_duration = time.time() - synthesis_start
+        logger.info(f"✅ Synthesis Complete ({synthesis_duration:.2f}s)")
+        logger.info(f"💬 Final Response: {final_response_text[:200]}...")
 
         status_updates.append("Response generated")
         
@@ -207,6 +227,9 @@ async def process_query(request: QueryRequest):
         conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
         conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
         conversation_history = keep_last_n_turns(conversation_history)
+
+        total_duration = time.time() - start_time
+        logger.info(f"--- 🏁 FINISH PROCESSING QUERY (Total: {total_duration:.2f}s) ---")
 
         return QueryResponse(
             intent="multi_agent",
@@ -228,23 +251,32 @@ async def process_query(request: QueryRequest):
 async def query_stream_generator(query: str):
     """Generate status updates during query processing"""
     global conversation_history
+    start_time = time.time()
     try:
         user_input = query.strip()
         if not user_input:
             yield f"data: {json.dumps({'type': 'error', 'error': 'Query cannot be empty'})}\n\n"
             return
+        
+        logger.info(f"--- 📥 START STREAMING QUERY ---")
+        logger.info(f"Query: '{user_input}'")
             
         yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your request...'})}\n\n"
         
-        temporal_context = get_temporal_context()
-        
         # 1. Manager Agent Plan
+        logger.info("🔍 Manager Agent: Starting Planning...")
+        manager_start = time.time()
+        
+        temporal_context = get_temporal_context()
         from agents import manager_agent
         plan_result = await manager_agent.run(
             f"{temporal_context}{user_input}", 
             message_history=conversation_history
         )
         plan = plan_result.output
+        manager_duration = time.time() - manager_start
+        logger.info(f"✅ Manager Agent: Planning Complete ({manager_duration:.2f}s)")
+        logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
         
         steps_desc = ", ".join([s.agent.value.upper() for s in plan.steps])
         yield f"data: {json.dumps({'type': 'status', 'content': f'Plan: {steps_desc}'})}\n\n"
@@ -260,6 +292,10 @@ async def query_stream_generator(query: str):
             agent_name = step.agent.value
             yield f"data: {json.dumps({'type': 'status', 'content': f'Step {i+1}: {agent_name.title()} Agent working...'})}\n\n"
             
+            logger.info(f"🔄 Step {i+1} START: {agent_name.upper()}")
+            logger.info(f"Instruction: {step.instruction}")
+            step_start = time.time()
+            
             previous_steps_context = ""
             if step_results:
                 previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
@@ -269,6 +305,10 @@ async def query_stream_generator(query: str):
             
             result = await agent.run(agent_input)
             step_output = str(result.output)
+            step_duration = time.time() - step_start
+            logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")
+            logger.info(f"📄 Result from {agent_name.upper()}: {step_output[:500]}..." if len(step_output) > 500 else f"📄 Result from {agent_name.upper()}: {step_output}")
+            
             step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
             
             # Handle SQL specific UI
@@ -280,10 +320,15 @@ async def query_stream_generator(query: str):
                 yield f"data: {json.dumps({'type': 'sql_query', 'query': query, 'explanation': explanation})}\n\n"
                 yield f"data: {json.dumps({'type': 'status', 'content': f'Executing database query on {database}...'})}\n\n"
                 
+                logger.info(f"🗄️ Executing SQL on {database}...")
+                sql_start = time.time()
                 query_result = await mysql_mcp.direct_call_tool(
                     name="execute_query",
                     args={"query": query, "database": database, "read_only": True}
                 )
+                sql_duration = time.time() - sql_start
+                logger.info(f"✅ SQL Execution Complete ({sql_duration:.2f}s)")
+                
                 formatted_results = format_query_results(query_result)
                 step_results[-1] += f"\n\nResults:\n{formatted_results}"
                 if query_result.get('success'):
@@ -293,14 +338,18 @@ async def query_stream_generator(query: str):
                     
         # 3. Final Synthesis
         yield f"data: {json.dumps({'type': 'status', 'content': 'Synthesizing final response...'})}\n\n"
+        logger.info("🧠 Synthesis: Generating final response...")
+        synthesis_start = time.time()
         
         final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
         final_context += f"\n\nInstruction: {plan.final_response_instruction}"
         
         final_result = await agents.general_agent.run(final_context)
         final_response_text = str(final_result.output)
+        synthesis_duration = time.time() - synthesis_start
+        logger.info(f"✅ Synthesis Complete ({synthesis_duration:.2f}s)")
+        logger.info(f"💬 Final Response: {final_response_text[:200]}...")
         
-
         # 4. Update History
         conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
         conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
@@ -313,6 +362,9 @@ async def query_stream_generator(query: str):
             "sql_data": sql_data
         }
         yield f"data: {json.dumps({'type': 'result', 'data': response_data})}\n\n"
+        
+        total_duration = time.time() - start_time
+        logger.info(f"--- 🏁 FINISH STREAMING QUERY (Total: {total_duration:.2f}s) ---")
 
     except Exception as e:
         logger.error(f"❌ Error processing query stream: {e}", exc_info=True)

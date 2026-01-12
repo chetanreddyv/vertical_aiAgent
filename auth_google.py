@@ -14,6 +14,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',           # Google Calendar
     'https://www.googleapis.com/auth/drive',              # Google Drive (full access)
     'https://www.googleapis.com/auth/documents',          # Google Docs
+    'https://www.googleapis.com/auth/gmail.modify',       # Gmail modify
+    'https://www.googleapis.com/auth/gmail.send',         # Gmail send
 ]
 
 print("=" * 60)
@@ -24,6 +26,7 @@ print("This will authenticate for:")
 print("  ✓ Google Calendar")
 print("  ✓ Google Drive")
 print("  ✓ Google Docs")
+print("  ✓ Gmail")
 print()
 
 client_config = {

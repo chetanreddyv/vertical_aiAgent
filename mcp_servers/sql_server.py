@@ -9,8 +9,17 @@ import pymysql
 import os
 from dotenv import load_dotenv
 import asyncio
+import logging
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+)
+logger = logging.getLogger("mysql_server")
+
 mcp = FastMCP("MySQL Database Server")
 
 def get_connection(database: Optional[str] = None):
@@ -109,6 +118,8 @@ def execute_query(query: str, database: Optional[str] = None, read_only: bool = 
     """
     Execute SQL query in a database. Restrict to read-only by default.
     """
+    logger.info(f"🛠️ Tool Called: execute_query(database='{database}', read_only={read_only})")
+    logger.info(f"Query: {query}")
     try:
         allowed = ('SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN')
         if read_only and not query.strip().upper().startswith(allowed):
@@ -123,7 +134,10 @@ def execute_query(query: str, database: Optional[str] = None, read_only: bool = 
                 else:
                     return {'success': True, 'query': query, 'affected': cursor.rowcount}
     except Exception as e:
+        logger.error(f"❌ Tool Error: execute_query - {str(e)}")
         return {'success': False, 'error': str(e), 'query': query}
+    finally:
+        logger.info(f"✅ Tool Complete: execute_query")
 
 # ===== Server entry point =====
 if __name__ == "__main__":

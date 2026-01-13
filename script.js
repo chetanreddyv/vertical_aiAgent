@@ -275,7 +275,6 @@ class ChatApp {
                 'email_and_sql': '🔄',
                 'drive_only': '📁',
                 'calendar_only': '📅',
-                'docs_only': '📝',
                 'tldv_only': '🗒️',
                 'multi_workspace': '🌐',
                 'general': '💬'

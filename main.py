@@ -15,7 +15,7 @@ import agents
 
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    docs_agent, tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
+    tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
     drive_mcp, tldv_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
@@ -50,7 +50,6 @@ def get_agent_by_name(name: str):
         "sql": sql_agent,
         "drive": drive_agent,
         "calendar": calendar_agent,
-        "docs": docs_agent,
         "tldv": tldv_agent,
         "general": general_agent
     }
@@ -117,7 +116,7 @@ async def root():
     return {
         "status": "online",
         "service": "AI Agent API",
-        "agents": ["email", "sql", "drive", "calendar", "docs", "tldv", "general"]
+        "agents": ["email", "sql", "drive", "calendar", "tldv", "general"]
     }
 
 @app.post("/query", response_model=QueryResponse)
@@ -404,7 +403,6 @@ async def health_check():
             "sql": "ready",
             "drive": "ready",
             "calendar": "ready",
-            "docs": "ready",
             "tldv": "ready",
             "general": "ready"
         },

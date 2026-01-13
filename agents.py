@@ -36,7 +36,6 @@ class AgentSelection(str, Enum):
     SQL = "sql"
     DRIVE = "drive"
     CALENDAR = "calendar"
-    DOCS = "docs"
     TLDV = "tldv"
     GENERAL = "general"
 
@@ -150,7 +149,6 @@ manager_agent = Agent(
         "- 'email': Sending and reading emails (Gmail).\n"
         "- 'sql': Querying the business database (Salesforce data).\n"
         "- 'drive': File management (Drive) and reading file content.\n"
-        "- 'docs': Creating and editing Google Docs.\n"
         "- 'general': Simple conversational, logic, or math tasks not requiring tools.\n\n"
         "RULES:\n"
         "1. ANALYZE context: You have access to the full conversation history. Resolve references like 'that meeting' or 'the file' based on previous turns.\n"
@@ -230,25 +228,6 @@ calendar_agent = Agent(
         "- CRITICAL: If asked to update or cancel an event, YOU MUST FIRST search for the event to get its ID. If asked to schedule, check for conflicts first.\n"
     ),
     mcp_servers=[calendar_mcp]
-)
-
-docs_agent = Agent(
-    "openai:gpt-4o-mini",
-    system_prompt=(
-        "You are a Google Docs document assistant.\n\n"
-        "Capabilities:\n"
-        "- Create new documents with formatted content\n"
-        "- Read and extract text from existing documents\n"
-        "- Edit and update document content\n"
-        "- Apply formatting (headings, lists, bold, italic)\n"
-        "- Search document content\n\n"
-        "Guidelines:\n"
-        "- Use proper document structure with headings\n"
-        "- Apply appropriate formatting for readability\n"
-        "- Confirm before making major edits\n"
-        "- Provide summaries of document content\n"
-        "- CRITICAL: If asked to read or edit a document, YOU MUST FIRST search for the document to get its ID. Do not guess IDs."
-    )
 )
 
 tldv_agent = Agent(

@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from enum import Enum
 from typing import Optional
+from dataclasses import dataclass
 import os
 import logging
 import time
@@ -29,6 +30,15 @@ for var in required_vars:
     if not os.getenv(var):
         logger.error(f"Missing required environment variable: {var}")
         # We don't raise here to allow import, but initialization might fail
+
+# SQL Dependencies for dependency injection
+@dataclass
+class SqlDeps:
+    """Dependencies for SQL agent containing schema and database configuration."""
+    schema_text: str  # Formatted database schema from format_schema_rows
+    business_context: str  # Business rules and definitions from sql_context.md
+    approved_databases: list[str]  # List of queryable databases
+    default_database: str = "Salesforce"  # Default target database
 
 # Manager Agent Models
 class AgentSelection(str, Enum):
@@ -101,19 +111,6 @@ drive_mcp = MCPServerStdio(
     }
 )
 
-# TLDV MCP (Docker)
-tldv_mcp = MCPServerStdio(
-    "docker",
-    args=[
-        "run",
-        "-i", 
-        "--init", 
-        "--rm", 
-        "-e", 
-        f"TLDV_API_KEY={os.getenv('TLDV_API_KEY')}", 
-        "tldv-mcp-server"
-    ]
-)
 
 # RAG MCP (Postgres Vector)
 rag_mcp = MCPServerStdio(
@@ -281,12 +278,70 @@ tldv_agent = Agent(
     mcp_servers=[rag_mcp]
 )
 
+
 sql_agent = Agent(
     "openai:gpt-4o-mini",
     output_type=sql,
-    system_prompt="PLACEHOLDER", 
+    deps_type=SqlDeps,
     mcp_servers=[mysql_mcp]
 )
+
+@sql_agent.system_prompt
+def sql_system_prompt(ctx: RunContext[SqlDeps]) -> str:
+    """Generate system prompt with injected schema and configuration at runtime."""
+    deps = ctx.deps
+    return f"""You are an Expert MySQL Database Analyst and Data Scientist.
+Your goal is to answer user questions by generating precise, efficient, and read-only SQL queries.
+
+## 🌍 Database Environment
+You are connected to a MySQL instance containing multiple databases.
+- **PRIMARY DATABASE**: `{deps.default_database}` (Contains core business data: Leads, Opportunities, Accounts, Contacts)
+- **APPROVED DATABASES**: {', '.join(f'`{db}`' for db in deps.approved_databases)}
+- **System Databases**: `information_schema` available for metadata queries
+
+## 🧠 Capabilities & Rules
+1. **Target the Right Database**:
+   - Default to `{deps.default_database}` for business data queries
+   - Use other approved databases if explicitly mentioned by the user
+   - **CRITICAL**: You MUST set the `database` field in your output to match the target database
+
+2. **Cross-Database Queries**:
+   - You can JOIN tables across databases using `database.table` syntax
+   - Example: `SELECT a.Name FROM {deps.default_database}.Account a JOIN other_db.Leads l ON a.Id = l.AccountId`
+
+3. **Schema & Metadata**:
+   - The complete database schema is provided below in the "Database Schema" section
+   - Use the schema to understand available tables and columns
+   - For dynamic exploration, query `information_schema`:
+     * List tables: `SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('mysql', 'sys', 'performance_schema', 'information_schema')`
+     * Describe table: `DESCRIBE database_name.table_name`
+
+4. **Safety & Performance**:
+   - **READ ONLY**: Only SELECT, SHOW, DESCRIBE, EXPLAIN queries are allowed
+   - **RESERVED KEYWORDS**: Always use backticks for table and column names to avoid conflicts with reserved keywords (e.g., use `` `Lead` ``, `` `Order` ``).
+   - **LIMIT RESULTS**: Always use `LIMIT 100` (or less) unless specific aggregation is requested
+   - **AVOID WILDCARDS**: Don't use `SELECT *` on large tables - select specific columns instead
+
+## 🛠️ Output Format
+You must return a structured JSON object with these fields:
+- `sqlquery`: The valid MySQL query to execute
+- `explanation`: A concise, professional explanation of what the query retrieves
+- `database`: The target database name (e.g., '{deps.default_database}', etc.)
+
+## 📚 Database Schema
+{deps.schema_text}
+
+## 📝 Business Context & Definitions
+{deps.business_context if deps.business_context else 'No additional business context provided.'}
+
+## 💡 Examples
+- "List all databases" → Query: `SHOW DATABASES`, Database: 'mysql'
+- "Top 5 opportunities" → Query: `SELECT Name, Amount FROM Opportunity ORDER BY Amount DESC LIMIT 5`, Database: '{deps.default_database}'
+- "Get top 3 leads" → Query: `SELECT FirstName, LastName FROM `Lead` ORDER BY CreatedDate DESC LIMIT 3`, Database: '{deps.default_database}'
+- "Count items in Salesforce" → Query: `SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{deps.default_database}'`, Database: 'information_schema'
+
+"""
+
 
 general_agent = Agent(
     "openai:gpt-4o-mini",
@@ -302,8 +357,8 @@ general_agent = Agent(
     )
 )
 
-async def initialize_agents():
-    """Initialize agents with dynamic configuration (schema, context)"""
+async def initialize_agents() -> SqlDeps:
+    """Initialize agents and return SQL dependencies for dependency injection."""
     logger.info("🎬 Starting Agents Initialization...")
     init_start = time.time()
     
@@ -317,71 +372,35 @@ async def initialize_agents():
             logger.info(f"📄 Loaded SQL context from {sql_context_file}")
     except Exception as e:
         logger.error(f"❌ Failed to read {sql_context_file}: {e}")
-        
-
-    # Fetch schema
+    
+    # Fetch schema using format_schema_rows from utils.py
     formatted_schema = "Schema unavailable."
     try:
-        # We now fetch ALL schemas (utils.py filters the system ones)
+        # Fetch ALL schemas (utils.py filters the system ones)
         schema_info_result = await mysql_mcp.direct_call_tool(
             name="schema_info", 
             args={} 
         )
         if schema_info_result.get("success"):
-            formatted_schema = format_schema_rows(schema_info_result["schema"])
+            # Only include Salesforce database and use lightweight format to save tokens
+            formatted_schema = format_schema_rows(
+                schema_info_result["schema"], 
+                include_dbs=["Salesforce", "information_schema"], 
+                lightweight=True
+            )
             logger.info(f"📊 Schema loaded successfully ({len(schema_info_result['schema'])} columns)")
     except Exception as e:
         logger.error(f"❌ Error fetching schema: {e}", exc_info=True)
-
-    # Update SQL agent prompt
-    sql_agent.system_prompt = f"""You are an Expert MySQL Database Analyst and Data Scientist. 
-Your goal is to answer user questions by generating precise, efficient, and read-only SQL queries.
-
-## 🌍 Database Environment
-You are connected to a MySQL instance containing multiple databases.
-- **PRIMARY DATABASE**: `Salesforce` (Contains core business data: Leads, Opportunities, Accounts, Contacts).
-- **Other Databases**: You have access to other user databases listed in the schema below.
-- **System Databases**: `information_schema` is available for metadata queries (tables, columns, etc.).
-
-## 🧠 Capabilities & Rules
-1. **Target the Right Database**:
-   - Usage: If the query is about business data, default to `Salesforce`. 
-   - Usage: If the user explicitly mentions another DB (e.g., "in the leads_db"), use that.
-   - **CRITICAL**: You must set the `database` field in your output to match the target.
-
-2. **Cross-Database Queries**:
-   - You can JOIN tables across databases using `database.table` syntax.
-   - Example: `SELECT a.Name FROM Salesforce.Account a JOIN leads_db.ExternalLeads e ON ...`
-
-3. **Schema & Metadata**:
-   - To find tables/columns if you are unsure: Query `information_schema`.
-   - List all tables: `SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ('mysql', 'sys', 'performance_schema', 'information_schema')`
-
-4. **Safety & Performance**:
-   - **READ ONLY**: Only SELECT, SHOW, DESCRIBE, EXPLAIN are allowed.
-   - **LIMIT**: Always use `LIMIT 100` (or less) unless specific aggregation is requested.
-   - **NO WILD**: Avoid `SELECT *` on large tables if not needed. Select specific columns.
-
-## 🛠️ Output Format
-You must return a structured JSON object (handled by the tool):
-- `sqlquery`: The valid MySQL query.
-- `explanation`: A concise, professional explanation of what the query retrieves.
-- `database`: The target database name (e.g., 'Salesforce', 'mysql' for system info).
-
-## 📚 Schema Context
-{formatted_schema}
-
-## 📝 Business Context & Definitions
-{custom_sql_context}
-
-## 💡 Examples
-- "List all databases" -> `SHOW DATABASES` (database='mysql')
-- "Show all tables" -> `SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES...` (database='mysql')
-- "Find the top 5 opportunities" -> `SELECT Name, Amount FROM Opportunity ORDER BY Amount DESC LIMIT 5` (database='Salesforce')
-- "Join Salesforce Accounts with External Leads" -> `SELECT ... FROM Salesforce.Account a JOIN other_db.Leads l ...` (database='Salesforce')
-"""
-
+    
+    # Create SQL dependencies object for dependency injection
+    sql_deps = SqlDeps(
+        schema_text=formatted_schema,
+        business_context=custom_sql_context,
+        approved_databases=["Salesforce", "mysql", "information_schema"],
+        default_database="Salesforce"
+    )
+    
     init_duration = time.time() - init_start
     logger.info(f"✅ Agents Initialization Complete ({init_duration:.2f}s)")
-    return formatted_schema
-
+    
+    return sql_deps

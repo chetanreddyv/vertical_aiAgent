@@ -16,7 +16,7 @@ import agents
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
     tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
-    drive_mcp, tldv_mcp, AgentSelection
+    drive_mcp, rag_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
 
@@ -31,9 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global universal conversation history
+# Global dependencies
 conversation_history = []
-formatted_schema = ""
+sql_deps: Optional['SqlDeps'] = None  # Will be initialized on startup
 
 
 def keep_last_n_turns(message_history: list, n_turns: int = 15) -> list:
@@ -58,7 +58,7 @@ def get_agent_by_name(name: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize agents and MCP servers on startup"""
-    global formatted_schema
+    global sql_deps
     logger.info("Initializing MCP servers and fetching schema...")
     
     # Start MCP servers
@@ -69,13 +69,20 @@ async def lifespan(app: FastAPI):
         drive_agent.run_mcp_servers(),
         tldv_agent.run_mcp_servers()
     ):
-        # Initialize agents (load schema, set prompts)
+        # Initialize agents (load schema, create dependencies)
         try:
-            formatted_schema = await agents.initialize_agents()
+            sql_deps = await agents.initialize_agents()
             logger.info("✅ Agents initialized successfully")
         except Exception as e:
             logger.error(f"Error during initialization: {e}", exc_info=True)
-            formatted_schema = "Schema unavailable."
+            # Create minimal SqlDeps as fallback
+            from agents import SqlDeps
+            sql_deps = SqlDeps(
+                schema_text="Schema unavailable.",
+                business_context="",
+                approved_databases=["Salesforce"],
+                default_database="Salesforce"
+            )
         
         yield
         
@@ -174,8 +181,13 @@ async def process_query(request: QueryRequest):
             agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
             agent = get_agent_by_name(agent_name)
             
-            # Run the agent
-            result = await agent.run(agent_input)
+            # Run the agent - SQL agent gets deps, others run without
+            if agent_name == "sql":
+                # Pass SqlDeps for schema and configuration injection
+                result = await agent.run(agent_input, deps=sql_deps)
+            else:
+                # Other agents run without special dependencies
+                result = await agent.run(agent_input)
             
             step_output = str(result.output)
             step_duration = time.time() - step_start
@@ -302,7 +314,13 @@ async def query_stream_generator(query: str):
             agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
             agent = get_agent_by_name(agent_name)
             
-            result = await agent.run(agent_input)
+            # Run the agent - SQL agent gets deps, others run without
+            if agent_name == "sql":
+                # Pass SqlDeps for schema and configuration injection
+                result = await agent.run(agent_input, deps=sql_deps)
+            else:
+                # Other agents run without special dependencies
+                result = await agent.run(agent_input)
             step_output = str(result.output)
             step_duration = time.time() - step_start
             logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")
@@ -387,10 +405,14 @@ async def reset_history(session_id: str = "default"):
 @app.get("/schema")
 async def get_schema():
     """Get the current database schema"""
-    return {
-        "schema": formatted_schema,
-        "status": "available" if formatted_schema != "Schema unavailable." else "unavailable"
-    }
+    if sql_deps:
+        return {
+            "schema": sql_deps.schema_text,
+            "status": "available" if sql_deps.schema_text != "Schema unavailable." else "unavailable",
+            "approved_databases": sql_deps.approved_databases,
+            "default_database": sql_deps.default_database
+        }
+    return {"schema": "Not initialized", "status": "unavailable"}
 
 @app.get("/health")
 async def health_check():
@@ -412,7 +434,7 @@ async def health_check():
             "drive": "connected",
             "tldv": "connected"
         },
-        "schema_loaded": formatted_schema != "Schema unavailable."
+        "schema_loaded": sql_deps is not None and sql_deps.schema_text != "Schema unavailable."
     }
 
 if __name__ == "__main__":

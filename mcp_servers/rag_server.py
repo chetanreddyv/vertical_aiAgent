@@ -9,7 +9,7 @@ import psycopg2
 from pgvector.psycopg2 import register_vector
 import os
 from dotenv import load_dotenv
-import openai
+import google.generativeai as genai
 from datetime import datetime, timedelta
 import json
 
@@ -18,8 +18,8 @@ load_dotenv()
 # Initialize FastMCP
 mcp = FastMCP("TLDV RAG Server")
 
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def get_db_connection():
     """Establish a connection to the PostgreSQL database."""
@@ -45,10 +45,14 @@ def get_db_connection():
     return conn
 
 def get_embedding(text: str) -> List[float]:
-    """Generate embedding for the given text using OpenAI."""
-    model = os.getenv("OPENAI_MODEL", "text-embedding-3-small")
-    response = client.embeddings.create(input=text, model=model)
-    return response.data[0].embedding
+    """Generate embedding for the given text using Gemini."""
+    model = "models/text-embedding-004"
+    result = genai.embed_content(
+        model=model,
+        content=text,
+        task_type="retrieval_document"
+    )
+    return result['embedding']
 
 @mcp.tool
 def search_meetings(

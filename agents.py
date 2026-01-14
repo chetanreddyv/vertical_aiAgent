@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Required environment variables including Google OAuth
 required_vars = [
     "EMAIL_PASSWORD", "EMAIL_ADDRESS", "DB_HOST", "DB_USER", 
-    "DB_PASSWORD", "OPENAI_API_KEY", 
+    "DB_PASSWORD", "GEMINI_API_KEY", 
     "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
     "TLDV_API_KEY"
 ]
@@ -75,7 +75,7 @@ mysql_mcp = MCPServerStdio(
         "DB_PORT": os.getenv("DB_PORT", "3306"),
         "DB_USER": os.getenv("DB_USER", "root"),
         "DB_PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
         "CUSTOM_SQL_CONTEXT": os.getenv("CUSTOM_SQL_CONTEXT", ""),
     },
     timeout=60,
@@ -124,14 +124,13 @@ rag_mcp = MCPServerStdio(
         "PG_DB": os.getenv("PG_DB", "vectordb"),
         "PG_SCHEMA": os.getenv("PG_SCHEMA", "app_data"),
         "PG_TABLE_NAME": os.getenv("PG_TABLE_NAME", "meeting_embeddings"),
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
-        "OPENAI_MODEL": os.getenv("OPENAI_MODEL", "text-embedding-3-small"),
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
     }
 )
 
 
 manager_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     output_type=ExecutionPlan,
     system_prompt=(
         "You are the Manager Agent, an intelligent orchestrator for a multi-agent system.\n"
@@ -165,26 +164,24 @@ manager_agent = Agent(
 )
 
 email_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     system_prompt=(
         "You are a Gmail automation assistant with access to Google Workspace tools.\n\n"
         "Capabilities:\n"
         "- Search and retrieve emails with filters (sender, subject, date range)\n"
         "- Send emails with rich formatting and attachments\n"
-        "- Read email content and extract information\n"
-        "- Manage labels and organize inbox\n\n"
+        "- Read email content and extract information\n\n"
         "Guidelines:\n"
-        "- Always confirm before sending emails\n"
-        "- Provide clear summaries of email content\n"
-        "- Use appropriate filters to find relevant emails\n"
-        "- Format responses in a clear, readable manner\n"
-        "- CRITICAL: If asked to read, summarize, or reply to an email, YOU MUST FIRST search for the email to get its ID/Thread ID. Do not guess IDs."
+        "- IF the user instruction explicitly asks to 'send' an email with clear details, USE the send_email tool IMMEDIATELY. Do not ask for confirmation for explicit commands.\n"  
+        "- Only ask for confirmation if the recipient or body text is ambiguous.\n"
+        "- Provide clear summaries of email content.\n"
+        "- CRITICAL: If asked to read/reply, FIRST search for the email ID."
     ),
     mcp_servers=[email_mcp]
 )
 
 drive_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     system_prompt=(
         "You are a Google Drive file management assistant.\n\n"
         "Capabilities:\n"
@@ -204,7 +201,7 @@ drive_agent = Agent(
 )
 
 calendar_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     system_prompt=(
         "You are a Google Calendar and video meeting scheduling assistant.\n\n"
         "Capabilities:\n"
@@ -228,7 +225,7 @@ calendar_agent = Agent(
 )
 
 tldv_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     system_prompt=(
         "You are a TLDV Meeting Notetaker assistant with advanced search capabilities.\n\n"
         "## Core Capabilities\n"
@@ -280,7 +277,7 @@ tldv_agent = Agent(
 
 
 sql_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     output_type=sql,
     deps_type=SqlDeps,
     mcp_servers=[mysql_mcp]
@@ -344,7 +341,7 @@ You must return a structured JSON object with these fields:
 
 
 general_agent = Agent(
-    "openai:gpt-4o-mini",
+    "google-gla:gemini-3-flash-preview",
     system_prompt=(
         "You are a helpful, knowledgeable AI assistant.\n\n"
         "When answering questions:\n"

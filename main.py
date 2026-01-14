@@ -9,6 +9,7 @@ import logging
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ModelRequest, UserPromptPart
+from pydantic_ai import UsageLimits
 
 # Import the client agents and utilities
 import agents
@@ -34,6 +35,10 @@ logger = logging.getLogger(__name__)
 # Global dependencies
 conversation_history = []
 sql_deps: Optional['SqlDeps'] = None  # Will be initialized on startup
+
+# Limits for specialist agents to prevent runaway executions
+# manager_agent remains unlimited (default)
+SPECIALIST_LIMITS = UsageLimits(request_limit=10, tool_calls_limit=5)
 
 
 def keep_last_n_turns(message_history: list, n_turns: int = 15) -> list:
@@ -184,10 +189,10 @@ async def process_query(request: QueryRequest):
             # Run the agent - SQL agent gets deps, others run without
             if agent_name == "sql":
                 # Pass SqlDeps for schema and configuration injection
-                result = await agent.run(agent_input, deps=sql_deps)
+                result = await agent.run(agent_input, deps=sql_deps, usage_limits=SPECIALIST_LIMITS)
             else:
                 # Other agents run without special dependencies
-                result = await agent.run(agent_input)
+                result = await agent.run(agent_input, usage_limits=SPECIALIST_LIMITS)
             
             step_output = str(result.output)
             step_duration = time.time() - step_start
@@ -317,10 +322,10 @@ async def query_stream_generator(query: str):
             # Run the agent - SQL agent gets deps, others run without
             if agent_name == "sql":
                 # Pass SqlDeps for schema and configuration injection
-                result = await agent.run(agent_input, deps=sql_deps)
+                result = await agent.run(agent_input, deps=sql_deps, usage_limits=SPECIALIST_LIMITS)
             else:
                 # Other agents run without special dependencies
-                result = await agent.run(agent_input)
+                result = await agent.run(agent_input, usage_limits=SPECIALIST_LIMITS)
             step_output = str(result.output)
             step_duration = time.time() - step_start
             logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")

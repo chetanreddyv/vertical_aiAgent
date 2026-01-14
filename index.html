@@ -201,91 +201,56 @@
 <body
     class="bg-nature-gradient text-nature-dark font-display h-screen overflow-hidden selection:bg-nature-accent selection:text-white">
     <div class="flex h-full w-full relative">
-        <input class="peer hidden" id="sidebar-toggle" type="checkbox" />
         <aside
-            class="sidebar hidden md:flex flex-col h-full glass-sidebar w-[280px] peer-checked:w-[88px] transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] z-20 shadow-sm relative flex-shrink-0">
+            class="sidebar hidden md:flex flex-col h-full glass-sidebar w-[88px] hover:w-[280px] transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] z-20 shadow-sm relative flex-shrink-0">
             <div class="flex flex-col h-full justify-between py-6 px-4 overflow-hidden">
                 <div class="flex flex-col gap-8">
                     <div
-                        class="flex items-center gap-3 h-10 px-2 overflow-hidden whitespace-nowrap transition-all duration-300 opacity-100 [.sidebar:hover_&]:opacity-100 peer-checked:opacity-0 peer-checked:w-0 peer-checked:px-0 [.sidebar:hover_&]:w-auto [.sidebar:hover_&]:px-2">
+                        class="flex items-center gap-3 h-10 px-2 overflow-hidden whitespace-nowrap transition-all duration-300 opacity-0 [.sidebar:hover_&]:opacity-100 w-0 [.sidebar:hover_&]:w-auto px-0 [.sidebar:hover_&]:px-2">
                         <div
                             class="w-9 h-9 rounded-xl bg-gradient-to-br from-nature-accent to-[#3c7d4d] flex items-center justify-center shadow-lg shadow-nature-accent/20 flex-shrink-0">
-                            <span class="material-symbols-outlined text-white text-[22px]">spa</span>
+                            <span class="material-symbols-outlined text-white text-[22px]">smart_toy</span>
                         </div>
                         <h1 class="text-nature-dark text-[19px] font-bold tracking-tight">JS AI Agent</h1>
                     </div>
 
-                    <!-- Toggle Button moved below logo -->
-                    <div class="flex px-2">
-                        <label
-                            class="cursor-pointer text-nature-medium hover:text-nature-dark transition-colors p-1.5 rounded-lg hover:bg-white/40 flex items-center gap-2 group/toggle w-full peer-checked:justify-center"
-                            for="sidebar-toggle">
-                            <span
-                                class="material-symbols-outlined transform rotate-180 peer-checked:rotate-0 transition-transform duration-300">first_page</span>
-                            <span
-                                class="text-sm font-medium whitespace-nowrap opacity-100 transition-opacity duration-300 peer-checked:opacity-0 peer-checked:hidden [.sidebar:hover_&]:opacity-100 [.sidebar:hover_&]:block">Collapse</span>
-                        </label>
-                    </div>
                     <!-- New Chat Button with ID for script.js -->
                     <!-- New Chat Button with ID for script.js -->
                     <button id="newChatBtn"
-                        class="new-chat-btn flex items-center gap-3 overflow-hidden rounded-xl h-[52px] bg-nature-dark hover:bg-nature-medium transition-all duration-300 text-white shadow-lg shadow-nature-dark/10 group relative px-3 w-full active:scale-[0.98]">
+                        class="new-chat-btn flex items-center gap-3 justify-center [.sidebar:hover_&]:justify-start overflow-hidden rounded-xl h-[52px] bg-nature-dark hover:bg-nature-medium transition-all duration-300 text-white shadow-lg shadow-nature-dark/10 group relative px-0 [.sidebar:hover_&]:px-3 w-full active:scale-[0.98]">
                         <div class="flex items-center justify-center w-6 h-6 flex-shrink-0">
                             <span class="material-symbols-outlined text-[24px]">add_circle</span>
                         </div>
                         <span
-                            class="font-bold text-[15px] tracking-wide whitespace-nowrap opacity-100 transition-opacity duration-200 peer-checked:opacity-0 peer-checked:w-0 [.sidebar:hover_&]:opacity-100 [.sidebar:hover_&]:w-auto sidebar-label">New
+                            class="font-bold text-[15px] tracking-wide whitespace-nowrap opacity-0 [.sidebar:hover_&]:opacity-100 w-0 [.sidebar:hover_&]:w-auto sidebar-label">New
                             Chat</span>
                     </button>
                     <style>
-                        /* Hover expand logic */
-                        #sidebar-toggle:checked~aside:hover {
-                            width: 280px;
-                        }
-
-                        #sidebar-toggle:checked~aside:hover .sidebar-label,
-                        #sidebar-toggle:checked~aside:hover .sidebar-section-title,
-                        #sidebar-toggle:checked~aside:hover h1,
-                        #sidebar-toggle:checked~aside:hover span.text-sm {
-                            opacity: 1;
-                            display: block;
-                            width: auto;
-                        }
-
-                        /* Hide elements when collapsed and NOT hovered */
-                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-label {
+                        /* Hide elements when collapsed */
+                        .sidebar-label,
+                        .sidebar-section-title {
                             opacity: 0;
                             width: 0;
                             display: none;
+                            transition: opacity 0.3s ease;
                         }
 
-                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-section-title {
-                            display: none;
+                        /* Show elements on hover */
+                        .sidebar:hover .sidebar-label,
+                        .sidebar:hover .sidebar-section-title {
+                            opacity: 1;
+                            width: auto;
+                            display: block;
                         }
 
-                        #sidebar-toggle:checked~aside:not(:hover) .sidebar-item {
+                        /* Sidebar item alignment when collapsed */
+                        .sidebar:not(:hover) .sidebar-item,
+                        .sidebar:not(:hover) .sidebar-label-item {
                             justify-content: center;
                             padding-left: 0;
                             padding-right: 0;
                         }
-
-                        /* Fix new chat padding when collapsed/not hovered */
-                        #sidebar-toggle:checked~aside:not(:hover) .new-chat-btn {
-                            justify-content: center;
-                            padding: 0;
-                        }
                     </style>
-                    <div class="flex flex-col gap-1 overflow-y-auto pr-0 mt-2">
-                        <div class="flex flex-col gap-1.5">
-                            <p
-                                class="text-nature-medium/60 text-[11px] font-bold uppercase tracking-wider px-4 py-2 sidebar-section-title">
-                                History</p>
-                            <div
-                                class="flex items-center h-[42px] px-4 rounded-xl font-medium text-nature-medium/50 text-sm italic">
-                                Recent chats will appear here...
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Connected Services Section -->
@@ -373,19 +338,11 @@
 
                 <div class="flex flex-col gap-2 border-t border-nature-medium/10 pt-5">
 
-                    <div class="flex items-center h-[52px] px-3 rounded-xl cursor-pointer hover:bg-white/40 transition-colors group sidebar-item gap-3.5"
-                        title="Profile">
-                        <div
-                            class="h-9 w-9 rounded-full bg-gradient-to-br from-[#7dbbd6] to-[#5ba368] flex items-center justify-center text-white text-xs font-bold shadow-sm ring-2 ring-white/60">
-                            AM</div>
-                        <div class="flex flex-col sidebar-label gap-0.5">
-                            <p class="text-nature-dark text-[14px] font-bold leading-none">Alex Morgan</p>
-                            <!-- Connection Status hidden structure for script.js -->
-                            <div class="status-indicator flex items-center gap-1.5 mt-1">
-                                <span class="status-dot w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                <span id="connectionStatus"
-                                    class="text-[10px] text-nature-medium/80 font-medium uppercase tracking-wide">Connected</span>
-                            </div>
+                    <div class="flex items-center h-[42px] px-4 py-2 mt-2 sidebar-label">
+                        <div class="status-indicator flex items-center gap-2">
+                            <span class="status-dot w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span id="connectionStatus"
+                                class="text-[11px] text-nature-medium/80 font-bold uppercase tracking-wider">Connected</span>
                         </div>
                     </div>
                 </div>
@@ -407,7 +364,7 @@
                     <button id="mobileMenuBtn" class="p-1 text-nature-dark flex items-center justify-center">
                         <span class="material-symbols-outlined">menu</span>
                     </button>
-                    <span class="material-symbols-outlined text-nature-accent">spa</span>
+                    <span class="material-symbols-outlined text-nature-accent">smart_toy</span>
                     <span class="font-bold text-nature-dark">JS AI Agent</span>
                 </div>
 
@@ -430,7 +387,7 @@
                         <div class="flex items-center gap-5 justify-center md:justify-start">
                             <h1
                                 class="text-nature-dark text-4xl md:text-[44px] font-extrabold tracking-tight drop-shadow-sm leading-tight">
-                                Good morning, Alex</h1>
+                                Good morning, User</h1>
                         </div>
                         <p class="text-nature-medium text-lg md:text-[22px] font-normal text-opacity-80">
                             How can I help you navigate your work today?</p>
@@ -514,11 +471,6 @@
                                 placeholder="Ask me to find a file, write a query, or schedule a meeting..." rows="1"
                                 autocomplete="off"></textarea>
                             <div class="absolute right-3 bottom-3 flex items-center gap-1.5">
-                                <button type="button"
-                                    class="flex items-center justify-center p-2.5 rounded-full hover:bg-black/5 text-nature-medium/60 hover:text-nature-dark transition-colors"
-                                    title="Attach file">
-                                    <span class="material-symbols-outlined text-[22px]">attach_file</span>
-                                </button>
                                 <!-- Send Button with ID for script.js -->
                                 <button type="submit" id="sendBtn"
                                     class="flex items-center justify-center h-10 w-10 rounded-full bg-nature-accent hover:bg-[#4a8c5f] text-white shadow-lg shadow-nature-accent/20 transition-all hover:scale-105 active:scale-95 ml-2">

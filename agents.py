@@ -112,20 +112,17 @@ drive_mcp = MCPServerStdio(
 )
 
 
-# RAG MCP (Postgres Vector)
+# RAG MCP (Pinecone)
 rag_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["mcp_servers/rag_server.py"],
     env={
-        "PG_HOST": os.getenv("PG_HOST", "localhost"),
-        "PG_PORT": os.getenv("PG_PORT", "5434"),
-        "PG_USER": os.getenv("PG_USER", "chetan"),
-        "PG_PASSWORD": os.getenv("PG_PASSWORD", ""),
-        "PG_DB": os.getenv("PG_DB", "vectordb"),
-        "PG_SCHEMA": os.getenv("PG_SCHEMA", "app_data"),
-        "PG_TABLE_NAME": os.getenv("PG_TABLE_NAME", "meeting_embeddings"),
+        "PINECONE_API_KEY": os.getenv("PINECONE_API_KEY", ""),
+        "PINECONE_INDEX_NAME": os.getenv("PINECONE_INDEX_NAME", "drive-rag"),
+        "PINECONE_MODEL": os.getenv("PINECONE_MODEL", "all-MiniLM-L6-v2"),
         "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
-    }
+    },
+    timeout=120,
 )
 
 
@@ -236,30 +233,26 @@ tldv_agent = Agent(
         "You have access to 'search_meetings' with advanced parameters:\n\n"
         "**Key Parameters:**\n"
         "- `query` (required): Natural language question or topic\n"
-        "- `min_similarity` (default: 0.2): Relevance threshold. Use 0.2 for broad searches.\n"
-        "- `include_context` (default: False): Set to `True` for complex queries where understanding the flow of conversation (previous/next turns) is critical.\n\n"
+        "- `min_similarity` (default: 0.3): Relevance threshold. Use 0.3 for broad searches.\n"
+        "- `apply_recency_boost` (default: True): Set to `True` to prioritize more recent meetings.\n\n"
         "**Filtering Parameters:**\n"
-        "- `start_date` / `end_date`: ISO format (YYYY-MM-DD)\n"
-        "- `speaker`: Partial match (e.g. 'Sarah')\n"
+        "- `start_date` / `end_date`: ISO format or natural language (e.g. '2024-12-01')\n"
+        "- `speaker`: Partial match on participants\n"
         "- `meeting_id`: Specific meeting scope\n\n"
         "**Quality Parameters:**\n"
         "- `deduplicate` (default: True): Prevents info overload by limiting chunks per meeting\n"
         "- `max_results_per_meeting` (default: 3): Max chunks from same meeting\n\n"
         "## Best Practices\n"
         "1. **Use filters proactively**: If user mentions time ('last month'), dates, or speakers, USE the filters.\n"
-        "2. **Context Matters**: If the user asks a complex question like 'How did they reach that conclusion?', use `search_meetings(..., include_context=True)`.\n"
+        "2. **Recency Matters**: For 'latest' or 'recent' queries, ensure `apply_recency_boost=True` is used.\n"
         "3. **Keyword-rich queries**: For decisions/action items, use keywords like 'decided', 'action item', 'agreed' in your query.\n"
-        "4. **Adjust similarity threshold**: \n"
-        "   - For specific facts/names: `min_similarity=0.4`\n"
-        "   - Default is `0.2`. RRF fusion is automatic.\n"
-        "5. **Interpret results carefully**:\n"
-        "   - **Score 0.2 - 0.35**: Potential match. Review content carefully.\n"
-        "   - **Score > 0.35**: High confidence match.\n"
-        "   - **Keyword Rank > 0.1**: Strong keyword match.\n"
+        "4. **Interpret results carefully**:\n"
+        "   - **Score 0.3 - 0.45**: Potential match. Review content carefully.\n"
+        "   - **Score > 0.45**: High confidence match.\n"
         "   - Use `citation_label` for referencing sources.\n"
-        "   - Use `metadata` (date, speaker, meeting title) to add context\n"
-        "6. **Citation**: Always cite which meeting(s) information came from using metadata.\n"
-        "7. **Multi-step searches**: If first search is too narrow, try broader query or lower threshold.\n\n"
+        "   - Use `metadata` to add context (date, speakers, meeting title)\n"
+        "5. **Citation**: Always cite which meeting(s) information came from using metadata.\n"
+        "6. **Multi-step searches**: If first search is too narrow, try broader query or lower threshold.\n\n"
         "## Response Format\n"
         "When presenting results:\n"
         "- Start with direct answer\n"
@@ -270,7 +263,6 @@ tldv_agent = Agent(
         "## Important Distinctions\n"
         "- You handle PAST meeting content (transcripts, what was said)\n"
         "- For FUTURE meetings (scheduling, invites) → defer to Calendar agent\n"
-        "- For meeting recordings/files → defer to Drive agent\n"
     ),
     mcp_servers=[rag_mcp]
 )

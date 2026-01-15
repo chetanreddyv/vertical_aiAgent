@@ -35,48 +35,20 @@ def get_embedding(text: str) -> List[float]:
         model_name = os.getenv("PINECONE_MODEL", "all-MiniLM-L6-v2")
         _embedding_model = SentenceTransformer(model_name)
     
-    embedding = _embedding_model.encode(text)
+    # Normalize embeddings for better similarity scoring
+    embedding = _embedding_model.encode(text, normalize_embeddings=True)
     return embedding.tolist()
 
-def calculate_recency_score(match_date_str: Optional[str]) -> float:
-    """
-    Calculate a recency boost factor based on the age of the document.
-    Returns a multiplier (1.0 for very recent, declining as age increases).
-    """
-    if not match_date_str:
-        return 1.0
-    
-    try:
-        match_date = date_parser.parse(match_date_str)
-        if match_date.tzinfo is None:
-            match_date = match_date.replace(tzinfo=timezone.utc)
-            
-        now = datetime.now(timezone.utc)
-        delta = now - match_date
-        days_old = max(0, delta.days)
-        
-        # Time decay factor: 1 / (1 + age_factor * days)
-        # 0.005 means a 200 day old document is at ~0.5 weight
-        decay = 1.0 / (1.0 + (days_old * 0.005))
-        return decay
-    except Exception:
-        return 1.0
-
-def calculate_keyword_boost(text: str, query: str) -> float:
-    """
-    Apply a simple keyword boost if query terms appear in the text.
-    Returns a multiplier (1.0 to 1.2).
-    """
-    query_terms = [t.lower() for t in query.split() if len(t) > 3]
-    if not query_terms:
-        return 1.0
-    
-    text_lower = text.lower()
-    matches = sum(1 for term in query_terms if term in text_lower)
-    
-    # max boost of 20% for finding multiple query terms
-    boost = 1.0 + (min(matches, 4) * 0.05)
-    return boost
+@mcp.tool
+def pinecone_index_info() -> Dict[str, Any]:
+    """Retrieve Pinecone index configuration and statistics."""
+    desc = pc.describe_index(name=index_name)
+    stats = index.describe_index_stats()
+    return {
+        "index_name": index_name,
+        "describe_index": desc.to_dict() if hasattr(desc, 'to_dict') else str(desc),
+        "describe_index_stats": stats.to_dict() if hasattr(stats, 'to_dict') else str(stats)
+    }
 
 @mcp.tool
 def search_meetings(
@@ -88,23 +60,21 @@ def search_meetings(
     speaker: Optional[str] = None,
     meeting_id: Optional[str] = None,
     deduplicate: bool = True,
-    max_results_per_meeting: int = 3,
-    apply_recency_boost: bool = True
+    max_results_per_meeting: int = 3
 ) -> Dict[str, Any]:
     """
-    Advanced search for meeting context using Pinecone with recency weighting and deduplication.
+    Search for meeting context using pure Pinecone semantic vector search.
     
     Args:
         query: Natural language query
         limit: Max number of final results
-        min_similarity: Minimum score threshold (default 0.3)
+        min_similarity: Minimum similarity threshold (default 0.3)
         start_date: ISO date filter
         end_date: ISO date filter
         speaker: Filter results by speaker name (partial match)
         meeting_id: Filter results by specific meeting ID
         deduplicate: If True, limits results per meeting to ensure diversity
         max_results_per_meeting: Max chunks allowed from a single meeting if deduplicating
-        apply_recency_boost: If True, boosts newer meetings in the results
     """
     try:
         # Convert query to embedding
@@ -153,18 +123,8 @@ def search_meetings(
             if speaker and speaker.lower() not in metadata.get("speakers", "").lower():
                 continue
                 
-            # 3. Apply Boosts
+            # 3. Use raw Pinecone score (normalized embeddings ensure clarity)
             final_relevance = match_score
-            
-            # Recency boost
-            recency_factor = 1.0
-            if apply_recency_boost:
-                recency_factor = calculate_recency_score(metadata.get("date"))
-                final_relevance *= (0.7 + (0.3 * recency_factor)) # 30% range based on recency
-            
-            # Keyword boost (Pseudo-Hybrid)
-            keyword_factor = calculate_keyword_boost(content, query)
-            final_relevance *= keyword_factor
             
             # 4. Global threshold check (on base similarity)
             if match_score < min_similarity:
@@ -175,11 +135,9 @@ def search_meetings(
                 "metadata": metadata,
                 "meeting_id": metadata.get("meeting_id"),
                 "similarity": match_score,
-                "recency_factor": recency_factor,
-                "keyword_boost": keyword_factor,
                 "relevance_score": final_relevance,
                 "citation_label": f"Meeting '{metadata.get('name', 'Unknown')}' ({metadata.get('date', 'Unknown')})",
-                "type": "Pinecone Advanced Hybrid"
+                "type": "Pinecone Vector Search"
             })
 
         # Sort by relevance score
@@ -208,7 +166,6 @@ def search_meetings(
             "query": query,
             "total_results": len(final_results),
             "info": {
-                "recency_applied": apply_recency_boost,
                 "deduplicated": deduplicate,
                 "hits_analyzed": len(results.matches)
             }

@@ -1,0 +1,145 @@
+# 🤖 Vertical AI Agent
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![Pydantic AI](https://img.shields.io/badge/Pydantic_AI-Latest-FF69B4.svg)](https://logfire.pydantic.dev/docs/pydantic-ai/)
+[![MCP](https://img.shields.io/badge/MCP-Protocol-orange.svg)](https://modelcontextprotocol.io/)
+
+**A Powerful Multi-Agent Orchestration System built with Pydantic AI and Model Context Protocol (MCP)**
+
+Broad-scoped AI systems often struggle with specialized tasks. **Vertical AI Agent** solves this by using a **Manager-Specialist architecture**. It breaks down complex user requests into discrete, executable steps performed by specialized agents with direct access to corporate tools and data.
+
+> [!IMPORTANT]
+> This system is designed for enterprise-grade automation. It handles planning, execution, and synthesis across disparate data silos (SQL, Drive, Meetings) in a single unified flow.
+
+---
+
+## 🏗️ Architecture Overview
+
+The system follows a triple-stage execution model: **Planning** → **Execution** → **Synthesis**.
+
+```mermaid
+graph TD
+    User([User Query]) --> Manager[Manager Agent]
+    
+    subgraph Planning Phase
+        Manager --> Plan[Execution Plan]
+        Plan --> Steps{Sequential Steps}
+    end
+    
+    subgraph Execution Phase
+        Steps --> s1[Step 1: Specialist A]
+        Steps --> s2[Step 2: Specialist B]
+        s1 -- Context/Outputs --> s2
+    end
+    
+    subgraph Specialist Agents
+        s1 -- MCP --> SQL[(MySQL DB)]
+        s1 -- MCP --> Google[Google Workspace]
+        s2 -- MCP --> RAG[(Meeting RAG)]
+    end
+    
+    s2 --> Synth[Synthesis Agent]
+    Synth --> Final([Final Response])
+```
+
+---
+
+## 🌟 Key Features
+
+### 1. Intelligent Orchestration (The Manager)
+The **Manager Agent** (powered by Gemini) analyzes intent and generates a structured `ExecutionPlan`.
+- **Dependency Resolution**: Steps can depend on outputs from previous steps.
+- **Input Templating**: Use `{{steps.s1.output}}` to pass data dynamically.
+- **Clarification Loop**: If a request is ambiguous (e.g., "Send an email" without a recipient), the manager pauses to ask clarifying questions.
+
+### 2. Specialized Agent Fleet
+Each agent is a domain expert with specific tools (via MCP):
+- **📧 Email Agent**: Search, read, and send emails via Gmail.
+- **📅 Calendar Agent**: Manage schedules, check availability, and create Google Meet links.
+- **🗄️ SQL Expert**: Expert in business schemas (Salesforce/Lead data). Generates and executes safe, read-only MySQL queries.
+- **📄 Drive Agent**: Manage files and read document contents across Google Drive.
+- **🎙️ TLDV (Meeting RAG)**: Semantic search across past meeting transcripts using Pinecone and vector embeddings.
+
+### 3. Transparent Execution
+- **Streaming Status**: Real-time feedback on what the agents are doing ("Step 1: SQL Agent working...").
+- **Deterministic Passing**: Explicit data passing between steps ensures accuracy and prevents "hallucinated actions".
+
+---
+
+## 🛠️ Technical Stack
+
+- **Framework**: [Pydantic AI](https://logfire.pydantic.dev/docs/pydantic-ai/) - For structured, type-safe agent interactions.
+- **Protocol**: [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) - Standardized communication with external tools.
+- **Language Models**: Google Gemini (1.5 Flash / 1.5 Pro).
+- **Backend**: FastAPI with Server-Sent Events (SSE) for streaming.
+- **Vector DB**: Pinecone (for meeting context retrieval).
+- **Database**: MySQL (for business data).
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.10+
+- MySQL Server
+- Pinecone Account
+- Google Cloud Project (for Workspace APIs)
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/chetanreddyv/vertical_aiAgent.git
+   cd vertical_aiAgent
+   ```
+
+2. **Set up virtual environment**:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+3. **Configure Environment**:
+   Create a `.env` file with the following:
+   ```env
+   GEMINI_API_KEY=your_key
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASSWORD=your_password
+   PINECONE_API_KEY=your_key
+   PINECONE_INDEX_NAME=drive-rag
+   GOOGLE_OAUTH_CLIENT_ID=...
+   GOOGLE_OAUTH_CLIENT_SECRET=...
+   ```
+
+4. **Initialize MCP Servers**:
+   The system automatically manages MCP servers defined in `mcp_servers/`. Ensure your credentials for Google and MySQL are correctly configured in the `.env`.
+
+5. **Run the Application**:
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000
+   ```
+
+---
+
+## 📂 Project Structure
+
+- `main.py`: FastAPI entry point and streaming logic.
+- `agents.py`: System prompts and Pydantic AI agent definitions.
+- `executor.py`: The "Brain" of the execution phase; manages state and multi-step logic.
+- `mcp_servers/`: Standalone MCP servers for SQL, Email, Drive, Calendar, and RAG.
+- `utils.py`: Schema formatting, temporal context, and result parsing helpers.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📄 License
+
+MIT License - See the [LICENSE](LICENSE) file for details.

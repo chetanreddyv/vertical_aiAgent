@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from enum import Enum
-from typing import Optional
+from typing import Optional, Literal
 from dataclasses import dataclass
 import os
 import logging
@@ -50,14 +50,21 @@ class AgentSelection(str, Enum):
     GENERAL = "general"
 
 class Step(BaseModel):
+    id: str = Field(..., description="Unique identifier for this step (e.g., 's1', 's2').")
     agent: AgentSelection = Field(..., description="The specialist agent to perform this step.")
-    instruction: str = Field(..., description="Precise, self-contained instruction for the agent. Must include all necessary context from previous steps.")
-    reasoning: str = Field(..., description="Why this step is necessary and how it contributes to the final goal.")
+    instruction: str = Field(..., description="Precise, self-contained instruction for the agent.")
+    depends_on: list[str] = Field(default_factory=list, description="List of step IDs that must complete before this step can start.")
+    inputs: dict[str, str] = Field(default_factory=dict, description="Templated input values from previous steps (e.g., {'context': '{{steps.s1.output}}'}).")
+    expected_output: str = Field(..., description="Brief description of what this step is expected to produce.")
+    side_effect: bool = Field(False, description="True if this step modifies data (sends email, updates DB, creates event).")
+    requires_confirmation: bool = Field(False, description="True if this step requires explicit user approval before execution.")
 
 class ExecutionPlan(BaseModel):
     steps: list[Step] = Field(..., description="Ordered list of steps to execute the user's request.")
-    rewritten_intent: str = Field(..., description="A refined, self-contained summary of the user's request. e.g., 'Schedule a follow-up meeting with the client for next Tuesday at 10 AM'.")
-    final_response_instruction: str = Field(..., description="Instruction on how to synthesize the final execution results into a response for the user.")
+    rewritten_intent: str = Field(..., description="A refined summary of the user's request.")
+    final_response_instruction: str = Field(..., description="Instruction on how to synthesize the final response.")
+    error_policy: Literal["retry", "ask_user", "fail_fast", "skip"] = Field("ask_user", description="Strategy for handling step failures.")
+    clarifying_questions: list[str] = Field(default_factory=list, description="Questions to ask the user if the request is ambiguous. If present, steps should be empty.")
 
 class sql(BaseModel):
     sqlquery: str = Field(..., description="The SQL query to execute.")
@@ -142,21 +149,26 @@ manager_agent = Agent(
         "- 'email': Sending and reading emails (Gmail).\n"
         "- 'sql': Querying the business database (Salesforce data).\n"
         "- 'drive': File management (Drive) and reading file content.\n"
-        "- 'general': Simple conversational, logic, or math tasks not requiring tools.\n\n"
+        "- 'general': Simple conversational, or reply with 'I can't help with that' whenever the question is not related to the above agents.\n\n"
         "RULES:\n"
         "1. ANALYZE context: You have access to the full conversation history. Resolve references like 'that meeting' or 'the file' based on previous turns.\n"
         "2. CHAIN steps: If a task requires output from one agent to be used by another (e.g., 'email the meeting summary'), create sequential steps.\n"
-        "   - Step 1: tldv ('Summarize the meeting...')\n"
-        "   - Step 2: email ('Send an email... Content: [Wait for Step 1 result]')\n"
-        "   - Note: You define the plan UPFRONT. In the 'instruction' for Step 2, clearly state that it depends on the result of Step 1.\n"
-        "3. TLDV vs CALENDAR: \n"
+        "   - Step s1: tldv ('Summarize the meeting...')\n"
+        "   - Step s2: email ('Send an email...')\n"
+        "     - depends_on: ['s1']\n"
+        "     - inputs: {'body': '{{steps.s1.output}}'}\n"
+        "3. INPUT TEMPLATING:\n"
+        "   - Use `{{steps.STEP_ID.output}}` to reference results from previous steps.\n"
+        "   - Example: Instruction 'Send email to {{steps.s1.output}} with content {{steps.s2.output}}'\n"
+        "4. SIDE EFFECTS & CONFIRMATION:\n"
+        "   - Set `side_effect=True` for ANY action that modifies external state (sending emails, creating events, deleting files, updating DB).\n"
+        "   - Set `requires_confirmation=True` for high-risk side effects (e.g., sending emails to external clients, deleting data) or if details are ambiguous.\n"
+        "5. CLARIFYING QUESTIONS:\n"
+        "   - If the user's request is too vague to form a plan (e.g., 'Send an email' without recipient or subject), DO NOT create steps.\n"
+        "   - Instead, populate `clarifying_questions` with 1-2 specific questions to ask the user.\n"
+        "6. TLDV vs CALENDAR: \n"
         "   - If the user asks about CONTENT (what was said, summaries, topics) -> TLDV.\n"
         "   - If the user asks about LOGISTICS (when is it, invite who) -> CALENDAR.\n"
-        "   - If ambiguous (e.g., 'meeting yesterday'), defaulting to TLDV is usually safer for content queries.\n"
-        "4. TLDV INSTRUCTIONS: Include temporal and speaker context explicitly:\n"
-        "   - User: 'What did Sarah say last week?' -> Step instruction: 'Search for Sarah's comments from the past week'\n"
-        "   - User: 'Meeting about budget yesterday' -> Step instruction: 'Find budget discussions from yesterday'\n"
-        "   - This helps the TLDV agent apply appropriate filters for better accuracy."
     )
 )
 

@@ -4,7 +4,7 @@ import json
 import time
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
@@ -20,6 +20,7 @@ from agents import (
     drive_mcp, rag_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
+from executor import PlanExecutor
 
 import os
 
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 # Global dependencies
 conversation_history = []
 sql_deps: Optional['SqlDeps'] = None  # Will be initialized on startup
+plan_executor: Optional[PlanExecutor] = None
 
 # Limits for specialist agents to prevent runaway executions
 # manager_agent remains unlimited (default)
@@ -63,7 +65,7 @@ def get_agent_by_name(name: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize agents and MCP servers on startup"""
-    global sql_deps
+    global sql_deps, plan_executor
     logger.info("Initializing MCP servers and fetching schema...")
     
     # Start MCP servers
@@ -89,6 +91,18 @@ async def lifespan(app: FastAPI):
                 default_database="Salesforce"
             )
         
+        # Initialize Executor with agents map
+        agents_map = {
+            "email": email_agent,
+            "sql": sql_agent,
+            "drive": drive_agent,
+            "calendar": calendar_agent,
+            "tldv": tldv_agent,
+            "general": general_agent
+        }
+        plan_executor = PlanExecutor(agents_map)
+        logger.info("✅ PlanExecutor initialized")
+
         yield
         
         logger.info("Shutting down MCP servers...")
@@ -121,6 +135,8 @@ class QueryResponse(BaseModel):
     error: Optional[str] = None
     sql_data: Optional[Dict[str, Any]] = None  # Structured SQL results
     status_updates: Optional[list[str]] = None  # Processing status messages
+    clarification_needed: Optional[bool] = False
+    clarifying_questions: Optional[list[str]] = None
 
 @app.get("/")
 async def root():
@@ -162,84 +178,52 @@ async def process_query(request: QueryRequest):
         plan = plan_result.output
         manager_duration = time.time() - manager_start
         logger.info(f"✅ Manager Agent: Planning Complete ({manager_duration:.2f}s)")
+        
+        # Check for clarifying questions
+        if plan.clarifying_questions:
+            logger.info(f"❓ Clarification Needed: {plan.clarifying_questions}")
+            return QueryResponse(
+                intent="clarification",
+                response="I need a bit more information before I can help.",
+                success=True,
+                clarification_needed=True,
+                clarifying_questions=plan.clarifying_questions,
+                status_updates=["Need clarification"]
+            )
+
         logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
+        try:
+             status_updates.append("Plan created with steps: " + ", ".join([str(s.agent.value).upper() for s in plan.steps]))
+        except:
+             pass
+             
+        # 2. Execute Plan using Executor
+        execution_result = {}
+        async for event in plan_executor.execute_plan(
+             plan, 
+             context=f"{temporal_context}\nOriginal Query: {user_input}",
+             sql_deps=sql_deps
+        ):
+            if event['type'] == 'status':
+                status_updates.append(str(event['content']))
+            elif event['type'] == 'result':
+                execution_result = event['data']
         
-        status_updates.append("Plan created with steps: " + ", ".join([str(s.agent.value).upper() for s in plan.steps]))
-        
-        # 2. Execute Steps Sequentially
-        step_results = []
-        sql_data = None
-        
-        for i, step in enumerate(plan.steps):
-            agent_name = step.agent.value
-            status_updates.append(f"Step {i+1}: Executing {agent_name.upper()} Agent...")
-            
-            logger.info(f"🔄 Step {i+1} START: {agent_name.upper()}")
-            logger.info(f"Instruction: {step.instruction}")
-            step_start = time.time()
-            
-            # Context for the specific step
-            previous_steps_context = ""
-            if step_results:
-                previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
-            
-            agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
-            agent = get_agent_by_name(agent_name)
-            
-            # Run the agent - SQL agent gets deps, others run without
-            if agent_name == "sql":
-                # Pass SqlDeps for schema and configuration injection
-                result = await agent.run(agent_input, deps=sql_deps, usage_limits=SPECIALIST_LIMITS)
-            else:
-                # Other agents run without special dependencies
-                result = await agent.run(agent_input, usage_limits=SPECIALIST_LIMITS)
-            
-            step_output = str(result.output)
-            step_duration = time.time() - step_start
-            logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")
-            logger.info(f"📄 Result from {agent_name.upper()}: {step_output[:500]}..." if len(step_output) > 500 else f"📄 Result from {agent_name.upper()}: {step_output}")
-            
-            step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
-            
-            # Capture SQL data if present
-            if hasattr(result.output, 'sqlquery'):
-                query = result.output.sqlquery
-                database = getattr(result.output, 'database', None) or "Salesforce"
-                status_updates.append(f"Executing database query on {database}...")
-                
-                logger.info(f"🗄️ Executing SQL on {database}...")
-                sql_start = time.time()
-                query_result = await mysql_mcp.direct_call_tool(
-                    name="execute_query",
-                    args={"query": query, "database": database, "read_only": True}
+        if not execution_result.get('success'):
+             if execution_result.get('clarification_needed'):
+                 return QueryResponse(
+                    intent="clarification",
+                    response="I need more info.", # execution shouldn't hit this if manager caught it, but fail-safe
+                    success=True,
+                    clarification_needed=True,
+                    clarifying_questions=execution_result.get('questions')
                 )
-                sql_duration = time.time() - sql_start
-                logger.info(f"✅ SQL Execution Complete ({sql_duration:.2f}s)")
-                
-                formatted_results = format_query_results(query_result)
-                step_results[-1] += f"\n\nResults:\n{formatted_results}"
-                if query_result.get('success'):
-                    sql_data = query_result
-                    sql_data['executed_query'] = query
-                    sql_data['executed_explanation'] = getattr(result.output, 'explanation', 'SQL Query')
+             raise Exception(execution_result.get('response', 'Unknown execution error'))
 
-        # 3. Final Synthesis
-        status_updates.append("Synthesizing final response...")
-        logger.info("🧠 Synthesis: Generating final response...")
-        synthesis_start = time.time()
-        
-        final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
-        final_context += f"\n\nInstruction: {plan.final_response_instruction}"
-        
-        final_result = await agents.general_agent.run(final_context)
-        final_response_text = str(final_result.output)
-        synthesis_duration = time.time() - synthesis_start
-        logger.info(f"✅ Synthesis Complete ({synthesis_duration:.2f}s)")
-        logger.info(f"💬 Final Response: {final_response_text[:200]}...")
+        final_response_text = execution_result['response']
+        sql_data = execution_result.get('sql_data')
 
-        status_updates.append("Response generated")
-        
-        # 4. Update Universal History
+        # 3. Update Universal History
         conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
         conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
         conversation_history = keep_last_n_turns(conversation_history)
@@ -292,6 +276,13 @@ async def query_stream_generator(query: str):
         plan = plan_result.output
         manager_duration = time.time() - manager_start
         logger.info(f"✅ Manager Agent: Planning Complete ({manager_duration:.2f}s)")
+        
+        # Check for clarifying questions
+        if plan.clarifying_questions:
+             yield f"data: {json.dumps({'type': 'clarification', 'questions': plan.clarifying_questions})}\n\n"
+             yield f"data: {json.dumps({'type': 'result', 'data': {'response': 'Please clarify: ' + ' '.join(plan.clarifying_questions)}})}\n\n"
+             return
+
         logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
         
         steps_desc = ", ".join([s.agent.value.upper() for s in plan.steps])
@@ -300,79 +291,24 @@ async def query_stream_generator(query: str):
         # Send the clean rewritten query to the UI
         yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_intent})}\n\n" 
         
-        # 2. Execute Steps
-        step_results = []
-        sql_data = None
+        # 2. Execute Plan using Executor
+        execution_result = {}
+        async for event in plan_executor.execute_plan(
+             plan, 
+             context=f"{temporal_context}\nOriginal Query: {user_input}",
+             sql_deps=sql_deps
+        ):
+            if event['type'] == 'status':
+                yield f"data: {json.dumps({'type': 'status', 'content': event['content']})}\n\n"
+            elif event['type'] == 'sql_query':
+                yield f"data: {json.dumps({'type': 'sql_query', 'query': event['query'], 'explanation': event['explanation']})}\n\n"
+            elif event['type'] == 'result':
+                execution_result = event['data']
         
-        for i, step in enumerate(plan.steps):
-            agent_name = step.agent.value
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Step {i+1}: {agent_name.title()} Agent working...'})}\n\n"
-            
-            logger.info(f"🔄 Step {i+1} START: {agent_name.upper()}")
-            logger.info(f"Instruction: {step.instruction}")
-            step_start = time.time()
-            
-            previous_steps_context = ""
-            if step_results:
-                previous_steps_context = "\n\nCONTEXT FROM PREVIOUS STEPS:\n" + "\n".join(step_results)
-            
-            agent_input = f"{temporal_context}TASK: {step.instruction}\n{previous_steps_context}"
-            agent = get_agent_by_name(agent_name)
-            
-            # Run the agent - SQL agent gets deps, others run without
-            if agent_name == "sql":
-                # Pass SqlDeps for schema and configuration injection
-                result = await agent.run(agent_input, deps=sql_deps, usage_limits=SPECIALIST_LIMITS)
-            else:
-                # Other agents run without special dependencies
-                result = await agent.run(agent_input, usage_limits=SPECIALIST_LIMITS)
-            step_output = str(result.output)
-            step_duration = time.time() - step_start
-            logger.info(f"✅ Step {i+1} COMPLETE: {agent_name.upper()} ({step_duration:.2f}s)")
-            logger.info(f"📄 Result from {agent_name.upper()}: {step_output[:500]}..." if len(step_output) > 500 else f"📄 Result from {agent_name.upper()}: {step_output}")
-            
-            step_results.append(f"--- Result from {agent_name} ---\n{step_output}")
-            
-            # Handle SQL specific UI
-            if hasattr(result.output, 'sqlquery'):
-                query = result.output.sqlquery
-                explanation = getattr(result.output, 'explanation', 'SQL Query')
-                database = getattr(result.output, 'database', None) or "Salesforce"
-                
-                yield f"data: {json.dumps({'type': 'sql_query', 'query': query, 'explanation': explanation})}\n\n"
-                yield f"data: {json.dumps({'type': 'status', 'content': f'Executing database query on {database}...'})}\n\n"
-                
-                logger.info(f"🗄️ Executing SQL on {database}...")
-                sql_start = time.time()
-                query_result = await mysql_mcp.direct_call_tool(
-                    name="execute_query",
-                    args={"query": query, "database": database, "read_only": True}
-                )
-                sql_duration = time.time() - sql_start
-                logger.info(f"✅ SQL Execution Complete ({sql_duration:.2f}s)")
-                
-                formatted_results = format_query_results(query_result)
-                step_results[-1] += f"\n\nResults:\n{formatted_results}"
-                if query_result.get('success'):
-                    sql_data = query_result
-                    sql_data['executed_query'] = query
-                    sql_data['executed_explanation'] = explanation
-                    
-        # 3. Final Synthesis
-        yield f"data: {json.dumps({'type': 'status', 'content': 'Synthesizing final response...'})}\n\n"
-        logger.info("🧠 Synthesis: Generating final response...")
-        synthesis_start = time.time()
+        final_response_text = execution_result.get('response', '')
+        sql_data = execution_result.get('sql_data')
         
-        final_context = f"Original Query: {user_input}\n\nExecution Results:\n" + "\n".join(step_results)
-        final_context += f"\n\nInstruction: {plan.final_response_instruction}"
-        
-        final_result = await agents.general_agent.run(final_context)
-        final_response_text = str(final_result.output)
-        synthesis_duration = time.time() - synthesis_start
-        logger.info(f"✅ Synthesis Complete ({synthesis_duration:.2f}s)")
-        logger.info(f"💬 Final Response: {final_response_text[:200]}...")
-        
-        # 4. Update History
+        # 3. Update History
         conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
         conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
         conversation_history = keep_last_n_turns(conversation_history)

@@ -87,7 +87,7 @@ class PlanExecutor:
             
         return result
 
-    async def execute_plan(self, plan: ExecutionPlan, context: str, sql_deps=None):
+    async def execute_plan(self, plan: ExecutionPlan, context: str, sql_deps=None, start_step_index: int = 0):
         """
         Execute the entire plan sequentially.
         Yields events: 
@@ -96,12 +96,13 @@ class PlanExecutor:
         - {'type': 'result', 'data': dict}
         - {'type': 'clarification', 'questions': list}
         """
-        self.step_outputs = {}
-        self.sql_data = None
+        if start_step_index == 0:
+            self.step_outputs = {}
+            self.sql_data = None
         results_summary = []
 
         # 1. Check for clarifying questions
-        if plan.clarifying_questions:
+        if start_step_index == 0 and plan.clarifying_questions:
             logger.info(f"❓ Plan requires clarification: {plan.clarifying_questions}")
             yield {
                 "type": "clarification", 
@@ -118,15 +119,71 @@ class PlanExecutor:
             return
 
         # 2. Execute Steps
+        start_index = start_step_index
+        
         for i, step in enumerate(plan.steps):
-            yield {"type": "status", "content": f"Step {i+1}: {step.agent.value.title()} Agent working..."}
+            # Skip steps that were already executed
+            if i < start_index:
+                continue
+
+            # Resolve placeholders for frontend display
+            resolved_instruction_for_ui = self.resolve_inputs(step.instruction)
+            resolved_inputs_for_ui = {}
+            if step.inputs:
+                for k, v in step.inputs.items():
+                    resolved_inputs_for_ui[k] = self.resolve_inputs(v)
+
+            # Yield detailed step start event
+            yield {
+                "type": "step_start",
+                "step_id": step.id,
+                "agent": step.agent.value,
+                "content": f"Step {i+1}: {step.agent.value.title()} Agent working...",
+                "instruction": resolved_instruction_for_ui
+            }
             
-            # TODO: Implement check for side_effect and requires_confirmation here
-            # For now, we log it
+            # Check for confirmation requirement
             if step.requires_confirmation:
-                logger.info(f"⚠️ Step {step.id} flagged for confirmation: {step.instruction}")
-                # In a real async flow, we would pause here.
-                # For this implementation, we proceed but log heavily.
+                # Check if this step was just confirmed (passed in via confirm_step arg or similar logic?)
+                # Actually, the caller will handle resuming. We just need to stop if we hit a confirmation 
+                # that hasn't been "resolved" (which effectively means we just pause here).
+                # But wait, if we are resuming, we are given the *edited* plan for this step.
+                # So if we are resuming at step i, we assume the caller has already addressed the confirmation 
+                # by potentially modifying the step in the plan passed to this function.
+                # However, we need a way to know if we should pause *now*.
+                # If we are starting at step i (resuming), we proceed. 
+                # If we encounter a *later* step j > i that needs confirmation, we pause there.
+                
+                # Logic: If this is the *first* step we are executing in this run, 
+                # we assume it's approved (or doesn't need approval if start_index=0 and req_conf=False).
+                # If we hit a requires_confirmation step *after* the start, we pause.
+                
+                # Wait, what if the first step needs confirmation? 
+                # The Manager creates the plan. Step 1 has req_conf=True.
+                # We start at index 0. We see req_conf=True. We must PAUSE.
+                # The user confirms. We call execute_plan with start_index=0 again (but with modified plan?).
+                # If we just call it again, we hit the same check.
+                # We need a way to say "treat this step as confirmed".
+                # Simplest way: The '/confirm-step' endpoint will likely *update* the step's requires_confirmation to False
+                # OR we just rely on the fact that if we are resuming, the user explicitly triggered it.
+                
+                # Let's add a `force_execution` set or similar? Or simpler:
+                # If we are resuming (i == start_index) AND the step was the reason we paused, we assume it's go time?
+                # No, that's risky.
+                
+                # Better: The `/confirm-step` logic in main.py will update the `requires_confirmation` flag to False 
+                # in the *copy* of the plan it submits for execution.
+                # So here, we just check the flag. If it's True, we pause.
+                
+                logger.info(f"⚠️ Step {step.id} requires confirmation: {resolved_instruction_for_ui}")
+                yield {
+                    "type": "confirmation_request",
+                    "step_id": step.id,
+                    "step_index": i,
+                    "instruction": resolved_instruction_for_ui,
+                    "inputs": resolved_inputs_for_ui
+                }
+                return # Stop execution here. State is preserved in main.py
 
             try:
                 result = await self.execute_step(step, context, sql_deps)
@@ -169,6 +226,7 @@ class PlanExecutor:
                      raise e
                 elif plan.error_policy == "skip":
                     self.step_outputs[step.id] = f"Error: {str(e)}"
+                    yield {"type": "status", "content": f"Step {step.id} failed but policy is 'skip'. Moving on..."}
                     continue
                 else: 
                      # Default to continue/retry logic or just capture error

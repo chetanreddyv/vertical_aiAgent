@@ -704,8 +704,8 @@ body {
 }
 
 /* Markdown Content Styles */
-.message-text h1, 
-.message-text h2, 
+.message-text h1,
+.message-text h2,
 .message-text h3 {
     margin-top: 1rem;
     margin-bottom: 0.5rem;
@@ -713,15 +713,23 @@ body {
     color: var(--text-primary);
 }
 
-.message-text h1 { font-size: 1.4rem; }
-.message-text h2 { font-size: 1.2rem; }
-.message-text h3 { font-size: 1.1rem; }
+.message-text h1 {
+    font-size: 1.4rem;
+}
+
+.message-text h2 {
+    font-size: 1.2rem;
+}
+
+.message-text h3 {
+    font-size: 1.1rem;
+}
 
 .message-text p {
     margin-bottom: 0.5rem;
 }
 
-.message-text ul, 
+.message-text ul,
 .message-text ol {
     margin-left: 1.5rem;
     margin-bottom: 0.75rem;
@@ -757,7 +765,161 @@ body {
     font-size: 0.875rem;
 }
 
-.status-item strong {
-    color: var(--text-primary);
+/* Confirmation UI Styles */
+.confirmation-container {
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.confirmation-box {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    width: 100%;
+    overflow: hidden;
+    animation: slideIn 0.3s ease-out;
+}
+
+.confirmation-header {
+    background: rgba(245, 158, 11, 0.1);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+    color: var(--warning);
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.confirmation-body {
+    padding: 1rem;
+}
+
+.confirmation-body p {
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.confirmation-input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.95rem;
+    min-height: 150px;
+    margin-bottom: 1rem;
+    resize: vertical;
+}
+
+.confirmation-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.inputs-preview {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+
+.inputs-preview strong {
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.inputs-preview pre {
+    color: var(--text-tertiary);
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: 'Monaco', 'Courier New', monospace;
+}
+
+.confirmation-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.btn-cancel,
+.btn-confirm {
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-cancel {
+    background: rgba(255, 255, 255, 0.05);
+    /* Slight bg vs transparent */
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+.btn-confirm {
+    background: var(--accent-primary);
+    /* Fallback */
+    background: var(--accent-gradient);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-confirm:hover {
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Step Card Styles */
+.step-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.step-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.step-badge {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--accent-primary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.step-body {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.4;
 }

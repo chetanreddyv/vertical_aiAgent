@@ -91,8 +91,6 @@ class ChatApp {
             welcomeScreen.classList.add('hidden');
         }
 
-        // We no longer hide suggestions here, as requested.
-
         // Add user message
         this.addMessage('user', query);
 
@@ -118,110 +116,141 @@ class ChatApp {
             </div>
         `;
         this.messagesContainer.appendChild(statusEl);
-        const statusList = statusEl.querySelector('.status-list');
 
         try {
-            // Use EventSource for streaming updates
-            const eventSource = new EventSource(`${API_URL}/query-stream?query=${encodeURIComponent(query)}`);
+            // Use fetch for streaming to better control the flow and allow POST updates later if needed
+            // Actually standard query is GET, but let's stick to the URL structure
+            const response = await fetch(`${API_URL}/query-stream?query=${encodeURIComponent(query)}`);
 
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+            if (!response.ok) throw new Error('Network response was not ok');
 
-                if (data.type === 'status') {
-                    // Remove typing indicator on first status
-                    this.removeTypingIndicator(typingId);
-
-                    // Show status container
-                    statusEl.style.display = 'flex';
-
-                    // Add status item
-                    const statusItem = document.createElement('div');
-                    statusItem.className = 'status-item';
-                    statusItem.innerHTML = `
-                        <span class="status-dot"></span>
-                        <span class="status-text">${data.content}</span>
-                    `;
-                    statusList.appendChild(statusItem);
-                    statusList.appendChild(statusItem);
-                    this.scrollToBottom();
-
-                } else if (data.type === 'rewritten_query') {
-                    // Show rewritten query
-                    const statusItem = document.createElement('div');
-                    statusItem.className = 'status-item rewritten-query';
-                    statusItem.innerHTML = `
-                        <span class="status-dot" style="background: var(--accent);"></span>
-                        <span class="status-text">User wants to "<strong>${data.content}</strong>"</span>
-                    `;
-                    statusList.appendChild(statusItem);
-                    this.scrollToBottom();
-
-                } else if (data.type === 'sql_query') {
-                    // Show SQL query immediately with special formatting
-                    this.removeTypingIndicator(typingId);
-                    statusEl.style.display = 'flex';
-
-                    // Add explanation
-                    const explanationItem = document.createElement('div');
-                    explanationItem.className = 'status-item';
-                    explanationItem.innerHTML = `
-                        <span class="status-dot"></span>
-                        <span class="status-text">📝 ${this.escapeHtml(data.explanation)}</span>
-                    `;
-                    statusList.appendChild(explanationItem);
-
-                    // Add SQL query with code formatting
-                    const queryItem = document.createElement('div');
-                    queryItem.className = 'status-item sql-query-item';
-                    queryItem.innerHTML = `
-                        <span class="status-dot"></span>
-                        <div class="status-text">
-                            <strong>🔍 Generated Query:</strong>
-                            <pre class="sql-query-code"><code>${this.escapeHtml(data.query)}</code></pre>
-                        </div>
-                    `;
-                    statusList.appendChild(queryItem);
-                    this.scrollToBottom();
-
-                } else if (data.type === 'result') {
-                    // Handle final result
-                    eventSource.close();
-
-                    // Wait a moment then remove status and show result
-                    setTimeout(() => {
-                        statusEl.remove();
-                        if (data.data.success) {
-                            this.addMessage('assistant', data.data.response, data.data.intent, data.data.sql_data);
-                        } else {
-                            this.addMessage('assistant', `❌ Error: ${data.data.error || 'Unknown error'}`, 'error');
-                        }
-                        this.setLoading(false);
-                        this.userInput.focus();
-                    }, 500);
-
-                } else if (data.type === 'error') {
-                    eventSource.close();
-                    this.removeTypingIndicator(typingId);
-                    statusEl.remove();
-                    this.addMessage('assistant', `❌ Error: ${data.error}`, 'error');
-                    this.setLoading(false);
-                }
-            };
-
-            eventSource.onerror = (error) => {
-                console.error('EventSource failed:', error);
-                eventSource.close();
-                this.removeTypingIndicator(typingId);
-                statusEl.remove();
-                this.addMessage('assistant', '❌ Connection lost. Please try again.', 'error');
-                this.setLoading(false);
-            };
+            await this.readStream(response.body.getReader(), statusEl, typingId);
 
         } catch (error) {
             console.error('Query failed:', error);
             this.removeTypingIndicator(typingId);
             if (statusEl) statusEl.remove();
             this.addMessage('assistant', `❌ Failed to connect to backend. Make sure the server is running on ${API_URL}`, 'error');
+            this.setLoading(false);
+        }
+    }
+
+    async readStream(reader, statusEl, typingId) {
+        const decoder = new TextDecoder();
+        const statusList = statusEl.querySelector('.status-list');
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.substring(6));
+
+                        if (data.type === 'status') {
+                            this.removeTypingIndicator(typingId);
+                            statusEl.style.display = 'flex';
+
+                            const statusItem = document.createElement('div');
+                            statusItem.className = 'status-item';
+                            statusItem.innerHTML = `
+                                <span class="status-dot"></span>
+                                <span class="status-text">${data.content}</span>
+                            `;
+                            statusList.appendChild(statusItem);
+                            this.scrollToBottom();
+
+                        } else if (data.type === 'step_start') {
+                            this.removeTypingIndicator(typingId);
+                            statusEl.style.display = 'flex';
+
+                            const statusItem = document.createElement('div');
+                            statusItem.className = 'status-item step-start';
+                            statusItem.innerHTML = `
+                                <div class="step-card">
+                                    <div class="step-header">
+                                        <span class="step-badge">${data.agent.toUpperCase()}</span>
+                                        <strong>Step ${data.step_id}</strong>
+                                    </div>
+                                    <div class="step-body">
+                                        ${this.formatMessage(data.instruction)}
+                                    </div>
+                                </div>
+                            `;
+                            statusList.appendChild(statusItem);
+                            this.scrollToBottom();
+
+                        } else if (data.type === 'rewritten_query') {
+                            const statusItem = document.createElement('div');
+                            statusItem.className = 'status-item rewritten-query';
+                            statusItem.innerHTML = `
+                                <span class="status-dot" style="background: var(--accent);"></span>
+                                <span class="status-text">User wants to "<strong>${data.content}</strong>"</span>
+                            `;
+                            statusList.appendChild(statusItem);
+                            this.scrollToBottom();
+
+                        } else if (data.type === 'sql_query') {
+                            this.removeTypingIndicator(typingId);
+                            statusEl.style.display = 'flex';
+
+                            const explanationItem = document.createElement('div');
+                            explanationItem.className = 'status-item';
+                            explanationItem.innerHTML = `
+                                <span class="status-dot"></span>
+                                <span class="status-text">📝 ${this.escapeHtml(data.explanation)}</span>
+                            `;
+                            statusList.appendChild(explanationItem);
+
+                            const queryItem = document.createElement('div');
+                            queryItem.className = 'status-item sql-query-item';
+                            queryItem.innerHTML = `
+                                <span class="status-dot"></span>
+                                <div class="status-text">
+                                    <strong>🔍 Generated Query:</strong>
+                                    <pre class="sql-query-code"><code>${this.escapeHtml(data.query)}</code></pre>
+                                </div>
+                            `;
+                            statusList.appendChild(queryItem);
+                            this.scrollToBottom();
+
+                        } else if (data.type === 'confirmation_request') {
+                            // Render Confirmation UI
+                            this.removeTypingIndicator(typingId);
+                            this.renderConfirmationUI(data, statusEl, typingId);
+                            return; // Stop reading this stream, wait for user action
+
+                        } else if (data.type === 'result') {
+                            setTimeout(() => {
+                                statusEl.remove();
+                                if (data.data.success) {
+                                    this.addMessage('assistant', data.data.response, data.data.intent, data.data.sql_data);
+                                } else {
+                                    this.addMessage('assistant', `❌ Error: ${data.data.error || 'Unknown error'}`, 'error');
+                                }
+                                this.setLoading(false);
+                                this.userInput.focus();
+                            }, 500);
+                            return;
+
+                        } else if (data.type === 'error') {
+                            this.removeTypingIndicator(typingId);
+                            statusEl.remove();
+                            this.addMessage('assistant', `❌ Error: ${data.error}`, 'error');
+                            this.setLoading(false);
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Stream reading failed:', error);
+            this.removeTypingIndicator(typingId);
+            this.addMessage('assistant', '❌ Stream error occurred.', 'error');
             this.setLoading(false);
         }
     }
@@ -555,6 +584,83 @@ class ChatApp {
             console.error('Failed to clear history:', error);
             this.addMessage('assistant', '❌ Failed to clear history on the backend.', 'error');
         }
+    }
+    renderConfirmationUI(data, statusEl, typingId) {
+        const statusList = statusEl.querySelector('.status-list');
+        const formId = `confirm-form-${Date.now()}`;
+
+        const confirmationItem = document.createElement('div');
+        confirmationItem.className = 'status-item confirmation-container';
+        confirmationItem.innerHTML = `
+            <div class="confirmation-box">
+                <div class="confirmation-header">
+                    <span class="material-symbols-outlined text-[20px]">warning</span>
+                    <span>Approval Required</span>
+                </div>
+                <div class="confirmation-body">
+                    <p>The agent wants to execute the following step:</p>
+                    <textarea id="${formId}-instruction" class="confirmation-input">${data.instruction}</textarea>
+                    
+                    ${data.inputs && Object.keys(data.inputs).length > 0 ? `<div class="inputs-preview">
+                        <strong>Inputs</strong>
+                        <pre>${JSON.stringify(data.inputs, null, 2)}</pre>
+                    </div>` : ''}
+                    
+                    <div class="confirmation-actions">
+                        <button class="btn-cancel" id="${formId}-cancel">Cancel</button>
+                        <button class="btn-confirm" id="${formId}-confirm">Confirm & Resume</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        statusList.appendChild(confirmationItem);
+        this.scrollToBottom();
+
+        // Add listeners
+        document.getElementById(`${formId}-cancel`).addEventListener('click', () => {
+            // Treat as user cancellation
+            confirmationItem.remove();
+            statusEl.remove();
+            this.addMessage('assistant', '❌ Action cancelled by user.', 'error');
+            this.setLoading(false);
+        });
+
+        document.getElementById(`${formId}-confirm`).addEventListener('click', async () => {
+            const newInstruction = document.getElementById(`${formId}-instruction`).value;
+
+            // Show loading state
+            confirmationItem.innerHTML = `
+                <div class="status-item">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Resuming execution...</span>
+                </div>
+            `;
+
+            this.addTypingIndicator(); // Re-add typing indicator
+
+            try {
+                const response = await fetch(`${API_URL}/confirm-step`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: data.session_id,
+                        step_id: data.step_id,
+                        approved_instruction: newInstruction,
+                        approved_inputs: data.inputs // Sending original inputs for now, could be editable too
+                    })
+                });
+
+                if (!response.ok) throw new Error('Confirmation failed');
+
+                await this.readStream(response.body.getReader(), statusEl, typingId);
+
+            } catch (error) {
+                console.error('Confirmation failed:', error);
+                this.addMessage('assistant', '❌ Failed to resume execution.', 'error');
+                this.setLoading(false);
+            }
+        });
     }
 }
 

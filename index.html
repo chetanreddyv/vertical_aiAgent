@@ -195,6 +195,58 @@
         }
         .typing-dot:nth-child(2) { animation-delay: 150ms; }
         .typing-dot:nth-child(3) { animation-delay: 300ms; }
+
+        /* Step Card Styling - Nature Theme */
+        .step-card {
+            @apply bg-white/40 border border-nature-accent/20 border-l-[3px] border-l-nature-accent rounded-xl p-4 mt-2 shadow-sm backdrop-blur-sm transition-all hover:bg-white/50;
+        }
+        .step-header {
+            @apply flex items-center gap-2 mb-2 text-xs font-bold uppercase tracking-wider text-nature-medium/70;
+        }
+        .step-badge {
+            @apply px-1.5 py-0.5 rounded-md bg-nature-accent/10 text-nature-accent border border-nature-accent/10;
+        }
+        .step-body {
+            @apply text-nature-dark/80 text-[13.5px] leading-relaxed;
+        }
+
+        /* Confirmation UI Styling - Premium Nested Box */
+        .confirmation-container {
+            @apply w-full mt-4 animate-fade-in-up;
+        }
+        .confirmation-box {
+            @apply glass-card border-none rounded-[24px] overflow-hidden shadow-xl shadow-nature-dark/5 ring-1 ring-white/60;
+        }
+        .confirmation-header {
+            @apply bg-amber-50/50 px-6 py-4 border-b border-amber-100/50 flex items-center gap-3 text-amber-700 font-bold text-sm tracking-wide;
+        }
+        .confirmation-body {
+            @apply p-6 flex flex-col gap-4;
+        }
+        .confirmation-body p {
+            @apply text-nature-dark/70 text-sm font-medium;
+        }
+        .confirmation-input {
+            @apply w-full min-h-[120px] p-4 rounded-2xl bg-white/60 border border-nature-medium/10 focus:border-nature-accent/40 focus:ring-4 focus:ring-nature-accent/5 text-nature-dark text-[15px] font-medium transition-all resize-none outline-none;
+        }
+        .inputs-preview {
+            @apply bg-nature-dark/5 rounded-2xl p-4 border border-nature-dark/5;
+        }
+        .inputs-preview strong {
+            @apply text-[11px] uppercase tracking-widest text-nature-medium/60 mb-2 block;
+        }
+        .inputs-preview pre {
+            @apply text-xs font-mono text-nature-dark/80 whitespace-pre-wrap;
+        }
+        .confirmation-actions {
+            @apply flex justify-end gap-3 mt-2;
+        }
+        .btn-cancel {
+            @apply px-5 py-2.5 rounded-xl border border-nature-medium/10 text-nature-medium font-bold text-sm hover:bg-white/60 hover:text-nature-dark transition-all active:scale-95;
+        }
+        .btn-confirm {
+            @apply px-6 py-2.5 rounded-xl bg-nature-dark text-white font-bold text-sm shadow-lg shadow-nature-dark/10 hover:bg-nature-medium transition-all hover:scale-[1.02] active:scale-95;
+        }
     </style>
 </head>
 

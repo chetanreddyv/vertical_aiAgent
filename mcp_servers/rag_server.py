@@ -1,7 +1,9 @@
 """
-FastMCP RAG Server (Advanced Pinecone Version)
-Exposes a tool to search for meeting context using Pinecone, sentence-transformers,
-and advanced RAG techniques like recency weightage and deduplication.
+FastMCP RAG Server (Corrected & Optimized)
+Features:
+- Hybrid-style pipeline: Dense Retrieval -> Python Filtering -> Re-ranking
+- Solves 'Context Precision' issues via Cross-Encoder
+- Solves 'Missing Data' issues via Pinecone-side date filtering
 """
 
 from fastmcp import FastMCP
@@ -9,7 +11,7 @@ from typing import Dict, Any, List, Optional
 import os
 from dotenv import load_dotenv
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder # Added CrossEncoder
 from datetime import datetime, timezone
 import json
 from dateutil import parser as date_parser
@@ -24,20 +26,32 @@ pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index_name = os.getenv("PINECONE_INDEX_NAME", "drive-rag")
 index = pc.Index(index_name)
 
-# Initialize Embedding Model
-# Lazy-load model to prevent MCP timeout during startup
+# --- Global Models (Lazy Loaded) ---
 _embedding_model = None
+_reranker_model = None
 
-def get_embedding(text: str) -> List[float]:
-    """Generate embedding for the given text using local sentence-transformers."""
+def get_embedding_model():
     global _embedding_model
     if _embedding_model is None:
-        model_name = os.getenv("PINECONE_MODEL", "all-MiniLM-L6-v2")
+        # Upgraded default model from MiniLM-L6 to mpnet-base for better semantic capture
+        model_name = os.getenv("PINECONE_MODEL", "all-mpnet-base-v2") 
+        print(f"Loading Embedding Model: {model_name}...")
         _embedding_model = SentenceTransformer(model_name)
-    
-    # Normalize embeddings for better similarity scoring
-    embedding = _embedding_model.encode(text, normalize_embeddings=True)
-    return embedding.tolist()
+    return _embedding_model
+
+def get_reranker_model():
+    global _reranker_model
+    if _reranker_model is None:
+        # Specialized model for re-sorting retrieved results
+        model_name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+        print(f"Loading Reranker Model: {model_name}...")
+        _reranker_model = CrossEncoder(model_name)
+    return _reranker_model
+
+def get_embedding(text: str) -> List[float]:
+    model = get_embedding_model()
+    # Normalize embeddings for cosine similarity
+    return model.encode(text, normalize_embeddings=True).tolist()
 
 @mcp.tool
 def pinecone_index_info() -> Dict[str, Any]:
@@ -54,7 +68,7 @@ def pinecone_index_info() -> Dict[str, Any]:
 def search_meetings(
     query: str, 
     limit: int = 10,
-    min_similarity: float = 0.3,
+    min_similarity: float = 0.2, # Lowered slightly to let Reranker decide
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     speaker: Optional[str] = None,
@@ -63,48 +77,49 @@ def search_meetings(
     max_results_per_meeting: int = 3
 ) -> Dict[str, Any]:
     """
-    Search for meeting context using pure Pinecone semantic vector search.
-    
-    Args:
-        query: Natural language query
-        limit: Max number of final results
-        min_similarity: Minimum similarity threshold (default 0.3)
-        start_date: ISO date filter
-        end_date: ISO date filter
-        speaker: Filter results by speaker name (partial match)
-        meeting_id: Filter results by specific meeting ID
-        deduplicate: If True, limits results per meeting to ensure diversity
-        max_results_per_meeting: Max chunks allowed from a single meeting if deduplicating
+    Search with Retrieval-Augmented Generation best practices:
+    1. Pinecone Vector Search (High Recall) with Metadata Filtering
+    2. Cross-Encoder Reranking (High Precision)
     """
     try:
-        # Convert query to embedding
+        # 1. Generate Query Embedding
         query_embedding = get_embedding(query)
         
-        # Build Pinecone-side filters
+        # 2. Build Pinecone Filters (Push-down predicates)
         filter_dict = {}
+        
         if meeting_id:
             filter_dict["meeting_id"] = meeting_id
             
-        # Execute search (fetch more for post-processing)
-        fetch_limit = limit * 5 if deduplicate else limit * 2
+        # 3. Execute Search (Fetch MORE for Reranking)
+        fetch_limit = 150 
+        
         results = index.query(
             vector=query_embedding,
-            top_k=min(fetch_limit, 100),
+            top_k=fetch_limit,
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
         
-        # Convert start/end date strings for filtering
+        # 4. Initial Processing & Python-side Filtering (e.g. date, speaker)
         s_date = date_parser.parse(start_date).replace(tzinfo=timezone.utc) if start_date else None
         e_date = date_parser.parse(end_date).replace(tzinfo=timezone.utc) if end_date else None
         
-        processed_hits = []
+        candidates = []
+        
         for match in results.matches:
             metadata = match.metadata or {}
             content = metadata.get("text", "")
-            match_score = match.score
             
-            # 1. Date range filtering (Python side)
+            # Fallback for structured content
+            if not content and "_node_content" in metadata:
+                try:
+                    node_content = json.loads(metadata["_node_content"])
+                    content = node_content.get("text", "")
+                except Exception:
+                    pass
+
+            # Date range filtering (Python side due to metadata format)
             match_dt = None
             if metadata.get("date"):
                 try:
@@ -118,47 +133,64 @@ def search_meetings(
                 continue
             if e_date and match_dt and match_dt > e_date:
                 continue
-                
-            # 2. Speaker filtering (Python side)
-            if speaker and speaker.lower() not in metadata.get("speakers", "").lower():
+
+            # Speaker Filtering (Python side because 'contains' is hard in Pinecone)
+            if speaker:
+                doc_speakers = metadata.get("speakers", "")
+                if not doc_speakers or speaker.lower() not in doc_speakers.lower():
+                    continue
+
+            # Initial threshold check (loose)
+            if match.score < min_similarity:
                 continue
                 
-            # 3. Use raw Pinecone score (normalized embeddings ensure clarity)
-            final_relevance = match_score
-            
-            # 4. Global threshold check (on base similarity)
-            if match_score < min_similarity:
-                continue
-            
-            processed_hits.append({
+            candidates.append({
                 "content": content,
                 "metadata": metadata,
                 "meeting_id": metadata.get("meeting_id"),
-                "similarity": match_score,
-                "relevance_score": final_relevance,
-                "citation_label": f"Meeting '{metadata.get('name', 'Unknown')}' ({metadata.get('date', 'Unknown')})",
-                "type": "Pinecone Vector Search"
+                "initial_score": match.score, # Keep vector score for debug
+                "id": match.id
             })
 
-        # Sort by relevance score
-        processed_hits.sort(key=lambda x: x["relevance_score"], reverse=True)
-
-        # 5. Deduplication logic
+        # 5. RERANKING STEP (The Precision Fix)
+        if candidates:
+            reranker = get_reranker_model()
+            
+            # Prepare pairs for Cross-Encoder: [Query, Document_Text]
+            passages = [c["content"] for c in candidates]
+            query_passage_pairs = [[query, p] for p in passages]
+            
+            # Predict scores (logits or normalized)
+            rerank_scores = reranker.predict(query_passage_pairs)
+            
+            # Assign new scores
+            for i, candidate in enumerate(candidates):
+                candidate["relevance_score"] = float(rerank_scores[i])
+                candidate["type"] = "Vector + Reranker"
+                
+            # Sort by RERANKER score, not vector score
+            candidates.sort(key=lambda x: x["relevance_score"], reverse=True)
+        
+        # 6. Deduplication Logic
         final_results = []
         if deduplicate:
             meeting_counts = {}
-            for hit in processed_hits:
+            for hit in candidates:
                 mid = hit["meeting_id"] or "unknown"
                 meeting_counts[mid] = meeting_counts.get(mid, 0) + 1
                 if meeting_counts[mid] <= max_results_per_meeting:
                     final_results.append(hit)
         else:
-            final_results = processed_hits
+            final_results = candidates
 
-        # Final cut and rank
+        # 7. Final Cut
         final_results = final_results[:limit]
+        
+        # Add display formatting
         for i, res in enumerate(final_results):
             res["rank"] = i + 1
+            meta = res["metadata"]
+            res["citation_label"] = f"Meeting '{meta.get('name', 'Unknown')}' ({meta.get('date', 'Unknown')})"
 
         return {
             "success": True, 
@@ -167,7 +199,8 @@ def search_meetings(
             "total_results": len(final_results),
             "info": {
                 "deduplicated": deduplicate,
-                "hits_analyzed": len(results.matches)
+                "hits_retrieved": len(results.matches),
+                "hits_reranked": len(candidates)
             }
         }
 

@@ -11,7 +11,14 @@ google-auth-httplib2
 google-api-python-client
 uvicorn
 google-generativeai
-notecard
+# notecard
 pinecone
 sentence-transformers
 numpy
+
+ragas
+datasets
+langchain-google-genai
+
+langchain-community
+rapidfuzz

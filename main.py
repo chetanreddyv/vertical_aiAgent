@@ -124,6 +124,15 @@ app.add_middleware(
 )
 
 # Request/Response models
+# In-memory store for paused executions
+paused_states: Dict[str, Dict[str, Any]] = {}
+
+class StepConfirmation(BaseModel):
+    session_id: str
+    step_id: str
+    approved_instruction: str
+    approved_inputs: Optional[Dict[str, str]] = None
+
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = "default"
@@ -182,9 +191,17 @@ async def process_query(request: QueryRequest):
         # Check for clarifying questions
         if plan.clarifying_questions:
             logger.info(f"❓ Clarification Needed: {plan.clarifying_questions}")
+            
+            clarification_response = "I need a bit more information before I can help."
+            
+            # Update History
+            conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+            conversation_history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
+            conversation_history = keep_last_n_turns(conversation_history)
+
             return QueryResponse(
                 intent="clarification",
-                response="I need a bit more information before I can help.",
+                response=clarification_response,
                 success=True,
                 clarification_needed=True,
                 clarifying_questions=plan.clarifying_questions,
@@ -250,7 +267,7 @@ async def process_query(request: QueryRequest):
 
 async def query_stream_generator(query: str):
     """Generate status updates during query processing"""
-    global conversation_history
+    global conversation_history, paused_states
     start_time = time.time()
     try:
         user_input = query.strip()
@@ -280,7 +297,23 @@ async def query_stream_generator(query: str):
         # Check for clarifying questions
         if plan.clarifying_questions:
              yield f"data: {json.dumps({'type': 'clarification', 'questions': plan.clarifying_questions})}\n\n"
-             yield f"data: {json.dumps({'type': 'result', 'data': {'response': 'Please clarify: ' + ' '.join(plan.clarifying_questions)}})}\n\n"
+             
+             clarification_response = 'Please clarify: ' + '\n'.join(plan.clarifying_questions)
+             
+             # Structure result correctly so UI displays it as assistant message
+             response_data = {
+                 "intent": "clarification",
+                 "response": clarification_response,
+                 "success": True,
+                 "clarification_needed": True,
+                 "questions": plan.clarifying_questions
+             }
+             yield f"data: {json.dumps({'type': 'result', 'data': response_data})}\n\n"
+             
+             # CRITICAL: Update History so context isn't lost
+             conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+             conversation_history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
+             conversation_history = keep_last_n_turns(conversation_history)
              return
 
         logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
@@ -291,6 +324,8 @@ async def query_stream_generator(query: str):
         # Send the clean rewritten query to the UI
         yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_intent})}\n\n" 
         
+        session_id = str(int(time.time())) # Simple session ID generation if not provided
+        
         # 2. Execute Plan using Executor
         execution_result = {}
         async for event in plan_executor.execute_plan(
@@ -300,10 +335,25 @@ async def query_stream_generator(query: str):
         ):
             if event['type'] == 'status':
                 yield f"data: {json.dumps({'type': 'status', 'content': event['content']})}\n\n"
+            elif event['type'] == 'step_start':
+                yield f"data: {json.dumps(event)}\n\n"
             elif event['type'] == 'sql_query':
                 yield f"data: {json.dumps({'type': 'sql_query', 'query': event['query'], 'explanation': event['explanation']})}\n\n"
             elif event['type'] == 'result':
                 execution_result = event['data']
+            elif event['type'] == 'confirmation_request':
+                # Pause execution!
+                paused_states[session_id] = {
+                    "plan": plan,
+                    "context": f"{temporal_context}\nOriginal Query: {user_input}",
+                    "step_index": event['step_index']
+                }
+                logger.info(f"⏸️ Paused execution for session {session_id} at step {event['step_index']}")
+                
+                # Yield confirmation event with session_id
+                event['session_id'] = session_id
+                yield f"data: {json.dumps(event)}\n\n"
+                return # End stream for now, client will resume via /confirm-step
         
         final_response_text = execution_result.get('response', '')
         sql_data = execution_result.get('sql_data')
@@ -328,6 +378,84 @@ async def query_stream_generator(query: str):
         logger.error(f"❌ Error processing query stream: {e}", exc_info=True)
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
+async def confirm_step_stream_generator(confirmation: StepConfirmation):
+    """Resume execution after confirmation"""
+    global paused_states, conversation_history
+    
+    session_id = confirmation.session_id
+    state = paused_states.get(session_id)
+    
+    if not state:
+        yield f"data: {json.dumps({'type': 'error', 'error': 'Session expired or not found'})}\n\n"
+        return
+
+    plan = state['plan']
+    context = state['context']
+    step_index = state['step_index']
+    
+    # Update the step with approved details
+    step = plan.steps[step_index]
+    step.instruction = confirmation.approved_instruction
+    if confirmation.approved_inputs:
+        step.inputs = confirmation.approved_inputs
+    
+    # Mark as confirmed by setting requires_confirmation to False
+    # This ensures execute_plan doesn't pause again on this step
+    step.requires_confirmation = False
+    
+    logger.info(f"▶️ Resuming session {session_id} from step {step_index} with updated instruction")
+    
+    try:
+        execution_result = {}
+        # Resume execution from the paused index
+        async for event in plan_executor.execute_plan(
+             plan, 
+             context=context,
+             sql_deps=sql_deps,
+             start_step_index=step_index
+        ):
+            if event['type'] == 'status':
+                yield f"data: {json.dumps({'type': 'status', 'content': event['content']})}\n\n"
+            elif event['type'] == 'step_start':
+                yield f"data: {json.dumps(event)}\n\n"
+            elif event['type'] == 'sql_query':
+                yield f"data: {json.dumps({'type': 'sql_query', 'query': event['query'], 'explanation': event['explanation']})}\n\n"
+            elif event['type'] == 'result':
+                execution_result = event['data']
+            elif event['type'] == 'confirmation_request':
+                # Encounters another confirmation request later in the plan
+                paused_states[session_id] = {
+                    "plan": plan,
+                    "context": context,
+                    "step_index": event['step_index']
+                }
+                event['session_id'] = session_id
+                yield f"data: {json.dumps(event)}\n\n"
+                return
+
+        # Cleanup state after successful completion
+        if session_id in paused_states:
+            del paused_states[session_id]
+
+        final_response_text = execution_result.get('response', '')
+        sql_data = execution_result.get('sql_data')
+        
+        # Update History
+        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        conversation_history = keep_last_n_turns(conversation_history)
+        
+        response_data = {
+            "intent": "multi_agent",
+            "response": final_response_text,
+            "success": True,
+            "sql_data": sql_data
+        }
+        yield f"data: {json.dumps({'type': 'result', 'data': response_data})}\n\n"
+
+    except Exception as e:
+        logger.error(f"❌ Error resuming execution: {e}", exc_info=True)
+        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
 @app.get("/query-stream")
 async def stream_query(query: str):
     return StreamingResponse(
@@ -335,13 +463,12 @@ async def stream_query(query: str):
         media_type="text/event-stream"
     )
 
-@app.post("/reset-history")
-async def reset_history(session_id: str = "default"):
-    """Reset conversation history for a session"""
-    global conversation_history
-    conversation_history = []
-    logger.info(f"🔄 Reset conversation history for session: {session_id}")
-    return {"status": "success", "message": "Conversation history reset"}
+@app.post("/confirm-step")
+async def confirm_step(confirmation: StepConfirmation):
+    return StreamingResponse(
+        confirm_step_stream_generator(confirmation),
+        media_type="text/event-stream"
+    )
 
 @app.get("/schema")
 async def get_schema():

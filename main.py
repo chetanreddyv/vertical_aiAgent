@@ -470,6 +470,15 @@ async def confirm_step(confirmation: StepConfirmation):
         media_type="text/event-stream"
     )
 
+@app.post("/reset-history")
+async def reset_history():
+    """Clear conversation history and paused execution states"""
+    global conversation_history, paused_states
+    conversation_history.clear()
+    paused_states.clear()
+    logger.info("🗑️ Conversation history and paused states cleared")
+    return {"status": "success", "message": "History cleared"}
+
 @app.get("/schema")
 async def get_schema():
     """Get the current database schema"""

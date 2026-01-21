@@ -181,8 +181,8 @@ email_agent = Agent(
         "- Send emails with rich formatting and attachments\n"
         "- Read email content and extract information\n\n"
         "Guidelines:\n"
-        "- IF the user instruction explicitly asks to 'send' an email with clear details, USE the send_email tool IMMEDIATELY. Do not ask for confirmation for explicit commands.\n"  
-        "- Only ask for confirmation if the recipient or body text is ambiguous.\n"
+        "- When instructed to send an email, execute the send_email tool with the provided details.\n"
+        "- The Manager Agent handles confirmation requirements, so execute instructions as given.\n"
         "- Provide clear summaries of email content.\n"
         "- CRITICAL: If asked to read/reply, FIRST search for the email ID."
     ),

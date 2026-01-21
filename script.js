@@ -637,7 +637,7 @@ class ChatApp {
                 </div>
             `;
 
-            this.addTypingIndicator(); // Re-add typing indicator
+            const newTypingId = this.addTypingIndicator(); // Capture the new ID
 
             try {
                 const response = await fetch(`${API_URL}/confirm-step`, {
@@ -647,16 +647,17 @@ class ChatApp {
                         session_id: data.session_id,
                         step_id: data.step_id,
                         approved_instruction: newInstruction,
-                        approved_inputs: data.inputs // Sending original inputs for now, could be editable too
+                        approved_inputs: data.inputs
                     })
                 });
 
                 if (!response.ok) throw new Error('Confirmation failed');
 
-                await this.readStream(response.body.getReader(), statusEl, typingId);
+                await this.readStream(response.body.getReader(), statusEl, newTypingId);
 
             } catch (error) {
                 console.error('Confirmation failed:', error);
+                this.removeTypingIndicator(newTypingId);
                 this.addMessage('assistant', '❌ Failed to resume execution.', 'error');
                 this.setLoading(false);
             }

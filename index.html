@@ -405,12 +405,6 @@
             </div>
         </aside>
         <main class="flex-1 flex flex-col h-full relative overflow-hidden">
-            <div
-                class="absolute top-[-5%] left-[5%] w-[35%] h-[35%] bg-emerald-200/20 rounded-full blur-[120px] pointer-events-none">
-            </div>
-            <div
-                class="absolute bottom-[10%] right-[5%] w-[30%] h-[30%] bg-blue-100/30 rounded-full blur-[120px] pointer-events-none">
-            </div>
 
             <!-- Header for mobile / Clear History -->
             <div
@@ -424,11 +418,6 @@
                     <span class="font-bold text-nature-dark">JS AI Agent</span>
                 </div>
 
-                <button id="clearHistoryBtn"
-                    class="pointer-events-auto p-2.5 rounded-xl bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/60 text-nature-medium hover:text-nature-accent shadow-sm transition-all"
-                    title="Clear History">
-                    <span class="material-symbols-outlined text-[20px]">restart_alt</span>
-                </button>
             </div>
 
             <!-- Messages Container with ID for script.js -->
@@ -447,65 +436,6 @@
                         </div>
                         <p class="text-nature-medium text-lg md:text-[22px] font-normal text-opacity-80">
                             How can I help you navigate your work today?</p>
-                    </div>
-                    <div class="suggestions grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
-                        <!-- Cards serving as suggesters -->
-                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/5 hover:border-emerald-200/50"
-                            data-query="Draft an email for me">
-                            <div
-                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)] animate-pulse">
-                            </div>
-                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
-                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD1At1eju4qfFRAruSTbBwONISvSxuF2KNH0-ldZHAQDOROixd94noFnZGtptRKIKrBx2shBndIo1f18NrS46FBxNH49R0DxUFwo8e8owVmiGQTF-ke8G1Ts2WqU0YGB5o3yCEHQiuZlXKNDfgyWnFenlyHmIS7Zptow5d7ZGozuUjOLE0h0hWXaQmb2Ur2uM-lKQI8juUExz9TAJx5IxZUDRQNJmkAGNex3_1TvgxC81v3FEm2ZgaURa08E5Z7M5x1W0WkCjN7cg');">
-                            </div>
-                            <div>
-                                <div class="flex items-center gap-2.5 mb-1.5">
-                                    <div class="p-2 rounded-xl bg-blue-50/80 text-blue-500 ring-1 ring-blue-100/50">
-                                        <span class="material-symbols-outlined text-[20px] filled">mail</span>
-                                    </div>
-                                    <p class="text-nature-dark text-[17px] font-bold">Email</p>
-                                </div>
-                                <p class="text-nature-medium text-[13px] leading-relaxed">Draft, summarize &amp;
-                                    organize inbox</p>
-                            </div>
-                        </div>
-                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/5 hover:border-purple-200/50"
-                            data-query="Show me all tables in the database">
-                            <div
-                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)]">
-                            </div>
-                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
-                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC3DXrobsaDmPscOLzUj5w0BLC24oUoutlavmC3ctyY65Y4T3MhZLbROlthgx_5DTj-fmvAtfrsTlmnyoqgv1fa7OdftC-aWMfsW7Tz1s5SjuewOUPlF97FVXtsSXLaufCBUN3box73liIFM-TawKPs00Gesczvrm5Os-25GiqUIna4alFBsBxXJqgdF4B1FbE78K_SCi0o4TiKEcdE6qGKaGfJbhtW6aF_MjKMCWlCoz4XonEFHEzE-4LqXblqDcOXq0CT3lMm3Q');">
-                            </div>
-                            <div>
-                                <div class="flex items-center gap-2.5 mb-1.5">
-                                    <div
-                                        class="p-2 rounded-xl bg-purple-50/80 text-purple-500 ring-1 ring-purple-100/50">
-                                        <span class="material-symbols-outlined text-[20px] filled">database</span>
-                                    </div>
-                                    <p class="text-nature-dark text-[17px] font-bold">SQL</p>
-                                </div>
-                                <p class="text-nature-medium text-[13px] leading-relaxed">Query databases naturally</p>
-                            </div>
-                        </div>
-                        <div class="suggestion-chip group relative flex flex-col gap-4 p-6 rounded-[20px] glass-card cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/5 hover:border-amber-200/50"
-                            data-query="List my Google Drive files">
-                            <div
-                                class="absolute top-5 right-5 h-2 w-2 rounded-full bg-nature-accent shadow-[0_0_8px_rgba(91,163,104,0.4)]">
-                            </div>
-                            <div class="h-[140px] w-full bg-cover bg-center rounded-[14px] opacity-90 group-hover:opacity-100 transition-opacity shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)]"
-                                style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAfCHX0EhnB_UuDnCkGE2NvhL-X2fTjtCsoQgd0_Ksovmrx4_ZzwBnC0HAf5BdTXWwmvQHDNwGTMuth6HGWgxdCtYJ4wloinr4jLbk_ucTbTrJ6QIZFHii0OlDYOX9IetExXUv61P_A2QarRfTUedI2t3Bg1AIVsHuzbvb5PG9HzUkeb_sHCDVqm18xwHLLXLPi4WfgPrc2tYu0LyKnGl5_05jBfft8JoWJFrQe0f3QL5j2ZKt3kRA2OayuOh-ubKjTYBVJBn7GNw');">
-                            </div>
-                            <div>
-                                <div class="flex items-center gap-2.5 mb-1.5">
-                                    <div class="p-2 rounded-xl bg-amber-50/80 text-amber-500 ring-1 ring-amber-100/50">
-                                        <span class="material-symbols-outlined text-[20px] filled">folder_open</span>
-                                    </div>
-                                    <p class="text-nature-dark text-[17px] font-bold">Drive</p>
-                                </div>
-                                <p class="text-nature-medium text-[13px] leading-relaxed">Search and organize files</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
 

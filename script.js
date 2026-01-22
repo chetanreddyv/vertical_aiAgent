@@ -7,7 +7,6 @@ class ChatApp {
         this.userInput = document.getElementById('userInput');
         this.sendBtn = document.getElementById('sendBtn');
         this.newChatBtn = document.getElementById('newChatBtn');
-        this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
         this.connectionStatus = document.getElementById('connectionStatus');
 
         this.init();
@@ -17,7 +16,6 @@ class ChatApp {
         // Event listeners
         this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
         this.newChatBtn.addEventListener('click', () => this.newChat());
-        this.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
 
         // Mobile Menu Toggle
         const mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -554,7 +552,10 @@ class ChatApp {
     }
 
     async newChat() {
-        if (confirm('Start a new conversation? This will clear the current chat.')) {
+        if (confirm('Start a new conversation? This will clear the current chat and history.')) {
+            // Call backend to clear history
+            await this.clearHistory();
+
             // Remove all existing messages
             const messages = this.messagesContainer.querySelectorAll('.message');
             messages.forEach(msg => msg.remove());

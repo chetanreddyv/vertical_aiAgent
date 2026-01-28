@@ -1,0 +1,273 @@
+INFO:     Started server process [56432]
+INFO:     Waiting for application startup.
+2026-01-27 02:13:02,061 - INFO - __main__ - Initializing MCP servers and fetching schema...
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:19: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token = pp.Word(tchar).setName("token")
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'addParseAction' deprecated - use 'add_parse_action'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:27: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  params = pp.Dict(pp.delimitedList(pp.Group(auth_param)))
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:33: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  www_authenticate = pp.delimitedList(pp.Group(challenge))
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                FastMCP 2.14.1                                │
+│                                                                              │
+│                                                                              │
+│                    🖥  Server name: Gmail Server                              │
+│                                                                              │
+│                    📦 Transport:   STDIO                                     │
+│                                                                              │
+│                    📚 Docs:        https://gofastmcp.com                     │
+│                    🚀 Hosting:     https://fastmcp.cloud                     │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[01/27/26 02:13:03] INFO     Starting MCP server 'Gmail Server'   server.py:2527
+                             with transport 'stdio'                             
+2026-01-27 02:13:03,862 - INFO - docket.worker - Starting worker 'MacBook-Air.local#56601' with the following tasks:
+2026-01-27 02:13:03,862 - INFO - docket.worker - * trace(message: str, ...)
+2026-01-27 02:13:03,862 - INFO - docket.worker - * fail(message: str, ...)
+2026-01-27 02:13:03,862 - INFO - docket.worker - * sleep(seconds: float, ...)
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                FastMCP 2.14.1                                │
+│                                                                              │
+│                                                                              │
+│                    🖥  Server name: MySQL Database Server                     │
+│                                                                              │
+│                    📦 Transport:   STDIO                                     │
+│                                                                              │
+│                    📚 Docs:        https://gofastmcp.com                     │
+│                    🚀 Hosting:     https://fastmcp.cloud                     │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[01/27/26 02:13:04] INFO     Starting MCP server 'MySQL Database  server.py:2527
+                             Server' with transport 'stdio'                     
+2026-01-27 02:13:04,977 - INFO - docket.worker - Starting worker 'MacBook-Air.local#56606' with the following tasks:
+2026-01-27 02:13:04,977 - INFO - docket.worker - * trace(message: str, ...)
+2026-01-27 02:13:04,977 - INFO - docket.worker - * fail(message: str, ...)
+2026-01-27 02:13:04,977 - INFO - docket.worker - * sleep(seconds: float, ...)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:19: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token = pp.Word(tchar).setName("token")
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'addParseAction' deprecated - use 'add_parse_action'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:27: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  params = pp.Dict(pp.delimitedList(pp.Group(auth_param)))
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:33: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  www_authenticate = pp.delimitedList(pp.Group(challenge))
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                FastMCP 2.14.1                                │
+│                                                                              │
+│                                                                              │
+│                    🖥  Server name: Google Calendar Server                    │
+│                                                                              │
+│                    📦 Transport:   STDIO                                     │
+│                                                                              │
+│                    📚 Docs:        https://gofastmcp.com                     │
+│                    🚀 Hosting:     https://fastmcp.cloud                     │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[01/27/26 02:13:05] INFO     Starting MCP server 'Google Calendar server.py:2527
+                             Server' with transport 'stdio'                     
+2026-01-27 02:13:05,589 - INFO - docket.worker - Starting worker 'MacBook-Air.local#56615' with the following tasks:
+2026-01-27 02:13:05,589 - INFO - docket.worker - * trace(message: str, ...)
+2026-01-27 02:13:05,590 - INFO - docket.worker - * fail(message: str, ...)
+2026-01-27 02:13:05,590 - INFO - docket.worker - * sleep(seconds: float, ...)
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                FastMCP 2.14.1                                │
+│                                                                              │
+│                                                                              │
+│                    🖥  Server name: TLDV RAG Server                           │
+│                                                                              │
+│                    📦 Transport:   STDIO                                     │
+│                                                                              │
+│                    📚 Docs:        https://gofastmcp.com                     │
+│                    🚀 Hosting:     https://fastmcp.cloud                     │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[01/27/26 02:13:10] INFO     Starting MCP server 'TLDV RAG        server.py:2527
+                             Server' with transport 'stdio'                     
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:19: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token = pp.Word(tchar).setName("token")
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'leaveWhitespace' deprecated - use 'leave_whitespace'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:20: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  token68 = pp.Combine(pp.Word("-._~+/" + pp.nums + pp.alphas) + pp.Optional(pp.Word("=").leaveWhitespace())).setName(
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:24: DeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  quoted_string = pp.dblQuotedString.copy().setName("quoted-string").setParseAction(unquote)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'setName' deprecated - use 'set_name'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:25: DeprecationWarning: 'addParseAction' deprecated - use 'add_parse_action'
+  auth_param_name = token.copy().setName("auth-param-name").addParseAction(downcaseTokens)
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:27: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  params = pp.Dict(pp.delimitedList(pp.Group(auth_param)))
+/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/httplib2/auth.py:33: DeprecationWarning: 'delimitedList' deprecated - use 'DelimitedList'
+  www_authenticate = pp.delimitedList(pp.Group(challenge))
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                FastMCP 2.14.1                                │
+│                                                                              │
+│                                                                              │
+│                    🖥  Server name: Google Drive Server                       │
+│                                                                              │
+│                    📦 Transport:   STDIO                                     │
+│                                                                              │
+│                    📚 Docs:        https://gofastmcp.com                     │
+│                    🚀 Hosting:     https://fastmcp.cloud                     │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[01/27/26 02:13:11] INFO     Starting MCP server 'Google Drive    server.py:2527
+                             Server' with transport 'stdio'                     
+2026-01-27 02:13:11,170 - INFO - docket.worker - Starting worker 'MacBook-Air.local#56621' with the following tasks:
+2026-01-27 02:13:11,170 - INFO - docket.worker - * trace(message: str, ...)
+2026-01-27 02:13:11,170 - INFO - docket.worker - * fail(message: str, ...)
+2026-01-27 02:13:11,170 - INFO - docket.worker - * sleep(seconds: float, ...)
+Traceback (most recent call last):
+  File "/Users/chetan/Documents/GitHub/vertical_aiAgent/mcp_servers/jira_server.py", line 14, in <module>
+    mcp = FastMCP(
+        name="Jira MCP Server",
+        dependencies=["jira", "python-dotenv"]
+    )
+TypeError: FastMCP.__init__() got an unexpected keyword argument 'dependencies'
+ERROR:      + Exception Group Traceback (most recent call last):
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/starlette/routing.py", line 694, in lifespan
+  |     async with self.lifespan_context(app) as maybe_state:
+  |                ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 214, in __aenter__
+  |     return await anext(self.gen)
+  |            ^^^^^^^^^^^^^^^^^^^^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/main.py", line 80, in lifespan
+  |     jira_agent.run_mcp_servers()
+  |     ~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 214, in __aenter__
+  |     return await anext(self.gen)
+  |            ^^^^^^^^^^^^^^^^^^^^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/agent/__init__.py", line 1698, in run_mcp_servers
+  |     async with self:
+  |                ^^^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/agent/__init__.py", line 1582, in __aenter__
+  |     await exit_stack.enter_async_context(toolset)
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 668, in enter_async_context
+  |     result = await _enter(cm)
+  |              ^^^^^^^^^^^^^^^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/toolsets/combined.py", line 51, in __aenter__
+  |     await exit_stack.enter_async_context(toolset)
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 668, in enter_async_context
+  |     result = await _enter(cm)
+  |              ^^^^^^^^^^^^^^^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/mcp.py", line 688, in __aenter__
+  |     async with AsyncExitStack() as exit_stack:
+  |                ~~~~~~~~~~~~~~^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 768, in __aexit__
+  |     raise exc
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 751, in __aexit__
+  |     cb_suppress = await cb(*exc_details)
+  |                   ^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/mcp.py", line 962, in client_streams
+  |     async with stdio_client(server=server) as (read_stream, write_stream):
+  |                ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/mcp/client/stdio/__init__.py", line 183, in stdio_client
+  |     anyio.create_task_group() as tg,
+  |     ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py", line 783, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Exception Group Traceback (most recent call last):
+    |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/mcp/client/stdio/__init__.py", line 189, in stdio_client
+    |     yield read_stream, write_stream
+    |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/mcp.py", line 963, in client_streams
+    |     yield read_stream, write_stream
+    |   File "/opt/homebrew/Cellar/python@3.14/3.14.2/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 751, in __aexit__
+    |     cb_suppress = await cb(*exc_details)
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/mcp/shared/session.py", line 238, in __aexit__
+    |     return await self._task_group.__aexit__(exc_type, exc_val, exc_tb)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py", line 783, in __aexit__
+    |     raise BaseExceptionGroup(
+    |         "unhandled errors in a TaskGroup", self._exceptions
+    |     ) from None
+    | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+    +-+---------------- 1 ----------------
+      | Traceback (most recent call last):
+      |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/pydantic_ai/mcp.py", line 704, in __aenter__
+      |     result = await self._client.initialize()
+      |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/mcp/client/session.py", line 171, in initialize
+      |     result = await self.send_request(
+      |              ^^^^^^^^^^^^^^^^^^^^^^^^
+      |     ...<16 lines>...
+      |     )
+      |     ^
+      |   File "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/lib/python3.14/site-packages/mcp/shared/session.py", line 306, in send_request
+      |     raise McpError(response_or_error.error)
+      | mcp.shared.exceptions.McpError: Connection closed
+      +------------------------------------
+
+ERROR:    Application startup failed. Exiting.

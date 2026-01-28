@@ -394,7 +394,16 @@
 
                 <div class="flex flex-col gap-2 border-t border-nature-medium/10 pt-5">
 
-                    <div class="flex items-center h-[42px] px-4 py-2 mt-2 sidebar-label">
+                    <div class="flex items-center h-[42px] px-4 py-2 mt-2 sidebar-label hover:bg-red-50/50 rounded-xl cursor-pointer transition-colors group"
+                        id="logoutBtn">
+                        <div class="status-indicator flex items-center gap-2">
+                            <span
+                                class="material-symbols-outlined text-red-500 text-[20px] group-hover:scale-110 transition-transform">logout</span>
+                            <span class="text-[11px] text-red-600/80 font-bold uppercase tracking-wider">Logout</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center h-[42px] px-4 py-2 mt-1 sidebar-label">
                         <div class="status-indicator flex items-center gap-2">
                             <span class="status-dot w-2 h-2 rounded-full bg-emerald-500"></span>
                             <span id="connectionStatus"
@@ -527,6 +536,56 @@
             </div>
         </main>
     </div>
+
+    <!-- Login Overlay -->
+    <div id="loginOverlay"
+        class="fixed inset-0 z-[100] bg-nature-dark/40 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="w-full max-w-[420px] glass-card rounded-[32px] p-8 md:p-10 shadow-2xl animate-fade-in-up">
+            <div class="flex flex-col items-center text-center gap-6 mb-8">
+                <div
+                    class="w-16 h-16 rounded-[24px] bg-gradient-to-br from-nature-accent to-[#3c7d4d] flex items-center justify-center shadow-xl shadow-nature-accent/20">
+                    <span class="material-symbols-outlined text-white text-[32px]">lock</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl font-extrabold text-nature-dark tracking-tight">Internal Access Only</h2>
+                    <p class="text-nature-medium font-medium mt-1">Please sign in to access the AI Agent</p>
+                </div>
+            </div>
+
+            <form id="loginForm" class="flex flex-col gap-5">
+                <div class="flex flex-col gap-2">
+                    <label for="username"
+                        class="text-[11px] font-bold uppercase tracking-widest text-nature-medium/70 ml-1">Username</label>
+                    <input type="text" id="username" required
+                        class="w-full px-5 py-4 rounded-2xl bg-white/60 border border-nature-medium/10 focus:border-nature-accent/40 focus:ring-4 focus:ring-nature-accent/5 text-nature-dark font-medium transition-all outline-none"
+                        placeholder="admin">
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="password"
+                        class="text-[11px] font-bold uppercase tracking-widest text-nature-medium/70 ml-1">Password</label>
+                    <input type="password" id="password" required
+                        class="w-full px-5 py-4 rounded-2xl bg-white/60 border border-nature-medium/10 focus:border-nature-accent/40 focus:ring-4 focus:ring-nature-accent/5 text-nature-dark font-medium transition-all outline-none"
+                        placeholder="••••••••">
+                </div>
+
+                <div id="loginError"
+                    class="hidden animate-fade-in-up text-red-500 text-sm font-bold text-center bg-red-50 py-3 rounded-xl border border-red-100 italic">
+                    Invalid credentials. Please try again.
+                </div>
+
+                <button type="submit" id="loginBtn"
+                    class="w-full py-4 mt-2 rounded-[20px] bg-nature-dark text-white font-bold text-lg shadow-xl shadow-nature-dark/10 hover:bg-nature-medium transition-all active:scale-[0.98] flex items-center justify-center gap-3">
+                    <span>Sign In</span>
+                    <span class="material-symbols-outlined text-[20px]">login</span>
+                </button>
+            </form>
+
+            <p class="text-center text-[10px] text-nature-medium/40 mt-8 font-bold uppercase tracking-widest">
+                JS AI Agent • Secure Environment
+            </p>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 

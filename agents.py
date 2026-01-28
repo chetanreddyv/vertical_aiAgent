@@ -47,6 +47,7 @@ class AgentSelection(str, Enum):
     DRIVE = "drive"
     CALENDAR = "calendar"
     TLDV = "tldv"
+    JIRA = "jira"
     GENERAL = "general"
 
 class Step(BaseModel):
@@ -132,6 +133,16 @@ rag_mcp = MCPServerStdio(
     timeout=120,
 )
 
+# Custom Jira MCP
+jira_mcp = MCPServerStdio(
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    args=["mcp_servers/jira_server.py"],
+    env={
+        "JIRA_API_KEY": os.getenv("JIRA_API_KEY", ""),
+        "JIRA_API_SECRET": os.getenv("JIRA_API_SECRET", ""),
+    }
+)
+
 
 manager_agent = Agent(
     "google-gla:gemini-3-flash-preview",
@@ -148,7 +159,9 @@ manager_agent = Agent(
         "   - Capabilities: Create/Update events, Check availability.\n"
         "- 'email': Sending and reading emails (Gmail). to send emails \n"
         "- 'sql': Querying the business database (Salesforce data).\n"
-        "- 'drive': File management (Drive) and reading file content.\n"
+        "- 'drive': File management (Drive) and retrieving knowledge from stored documents (PDFs, reports, etc).\n"
+        "- 'jira': Project management, issue tracking, and software development tasks.\n"
+        "   - Capabilities: Create/Update issues, Add comments, Transition status, Search issues.\n"
         "- 'general': Simple conversational, or reply with 'I can't help with that' whenever the question is not related to the above agents.\n\n"
         "RULES:\n"
         "1. ANALYZE context: You have access to the full conversation history. Resolve references like 'that meeting' or 'the file' based on previous turns.\n"
@@ -192,21 +205,26 @@ email_agent = Agent(
 drive_agent = Agent(
     "google-gla:gemini-3-flash-preview",
     system_prompt=(
-        "You are a Google Drive file management assistant.\n\n"
+        "You are a Google Drive file management and knowledge assistant.\n\n"
         "Capabilities:\n"
-        "- Search files and folders using natural language (e.g., 'budget report') or Drive query syntax\n"
-        "- Read content of Google Docs, Sheets, Slides, MS Office files, and text files\n"
-        "- Upload and download files\n"
-        "- Create folders to organize content\n"
-        "- Get file metadata and details\n\n"
+        "- Search and retrieve knowledge from stored documents (PDFs, Docs, Text) using 'search_documents'\n"
+        "- Search files/folders metadata (listing) using natural language or Drive query syntax via 'search_files'\n"
+        "- Read content of specific files if you have the ID\n"
+        "- Upload, download, create folders\n"
+        "- Get file metadata\n\n"
         "Guidelines:\n"
-        "- Provide clear file listings with names, types, and sizes\n"
-        "- Use descriptive folder structures\n"
-        "- Report upload/download progress and success\n"
-        "- When searching, try natural language first; the system handles the query translation\n"
-        "- CRITICAL: If the user asks about the content of a file, YOU MUST FIRST search for the file to get its ID, and THEN read its content using that ID. Do not guess IDs."
+        "- **Content vs. Files**:\n"
+        "  - If the user asks about *information inside* documents (e.g., 'What does the budget report say?', 'Find info about project X'), use `search_documents`. This uses semantic search over the knowledge base.\n"
+        "  - If the user asks for *files themselves* (e.g., 'List my PDF files', 'Find the file named report.pdf'), use `search_files` (Drive API).\n"
+        "- **RAG Search (`search_documents`)**:\n"
+        "  - Use this for open-ended questions about knowledge.\n"
+        "  - Results include 'citation_label' and snippets. Cite these in your answer.\n"
+        "- **Drive Management**:\n"
+        "  - Provide clear file listings with names, types, and sizes.\n"
+        "  - Report upload/download progress.\n"
+        "- CRITICAL: Do not confuse `search_documents` (content/knowledge) with `search_files` (file system/metadata).\n"
     ),
-    mcp_servers=[drive_mcp]
+    mcp_servers=[rag_mcp, drive_mcp]
 )
 
 calendar_agent = Agent(
@@ -276,6 +294,24 @@ tldv_agent = Agent(
     mcp_servers=[rag_mcp]
 )
 
+jira_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    system_prompt=(
+        "You are a Jira project management assistant.\n\n"
+        "Capabilities:\n"
+        "- Search for issues using JQL or natural language\n"
+        "- Create new issues (Tasks, Bugs, Stories) in specific projects\n"
+        "- Update existing issues (status, assignee, priority)\n"
+        "- Add comments to issues\n"
+        "- Get detailed issue information\n\n"
+        "Guidelines:\n"
+        "- When creating issues, ask for project key if not provided (default to 'PROJ' if necessary but prefer asking)\n"
+        "- Use clear summaries and descriptions\n"
+        "- When searching, provide key details: Key, Summary, Status, Assignee, Priority\n"
+        "- CRITICAL: If asked to update an issue, FIRST search for it to confirm the Key.\n"
+    ),
+    mcp_servers=[jira_mcp]
+)
 
 sql_agent = Agent(
     "google-gla:gemini-3-flash-preview",

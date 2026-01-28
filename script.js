@@ -9,6 +9,12 @@ class ChatApp {
         this.newChatBtn = document.getElementById('newChatBtn');
         this.connectionStatus = document.getElementById('connectionStatus');
 
+        // Auth State
+        this.auth = localStorage.getItem('agent_auth') || null;
+        this.loginOverlay = document.getElementById('loginOverlay');
+        this.loginForm = document.getElementById('loginForm');
+        this.logoutBtn = document.getElementById('logoutBtn');
+
         this.init();
     }
 
@@ -28,6 +34,15 @@ class ChatApp {
                 sidebar.classList.toggle('h-full');
             });
         }
+
+        // Auth listeners
+        this.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        if (this.logoutBtn) {
+            this.logoutBtn.addEventListener('click', () => this.logout());
+        }
+
+        // Re-check auth on init
+        this.checkAuth();
 
         // Auto-resize textarea
         this.userInput.addEventListener('input', () => this.autoResize());
@@ -56,8 +71,11 @@ class ChatApp {
     }
 
     async checkHealth() {
+        if (!this.auth) return;
         try {
-            const response = await fetch(`${API_URL}/health`);
+            const response = await fetch(`${API_URL}/health`, {
+                headers: { 'Authorization': this.auth }
+            });
             const data = await response.json();
 
             if (data.status === 'healthy') {
@@ -68,8 +86,94 @@ class ChatApp {
         } catch (error) {
             console.error('Health check failed:', error);
             this.connectionStatus.textContent = 'Disconnected';
-            this.connectionStatus.parentElement.querySelector('.status-dot').style.background = 'var(--error)';
+            this.connectionStatus.parentElement.querySelector('.status-dot').style.background = '#ef4444';
         }
+    }
+
+    async checkAuth() {
+        if (!this.auth) {
+            this.showLogin();
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/verify-auth`, {
+                headers: { 'Authorization': this.auth }
+            });
+
+            if (response.ok) {
+                this.hideLogin();
+                this.checkHealth();
+            } else {
+                this.logout();
+            }
+        } catch (error) {
+            console.error('Auth verification failed:', error);
+            this.showLogin();
+        }
+    }
+
+    showLogin() {
+        this.loginOverlay.classList.remove('hidden');
+        this.loginOverlay.classList.add('flex');
+        // Force reflow
+        void this.loginOverlay.offsetWidth;
+        this.loginOverlay.style.opacity = '1';
+        this.loginOverlay.style.pointerEvents = 'auto';
+    }
+
+    hideLogin() {
+        this.loginOverlay.style.opacity = '0';
+        this.loginOverlay.style.pointerEvents = 'none';
+
+        // Wait for transition
+        setTimeout(() => {
+            this.loginOverlay.classList.add('hidden');
+            this.loginOverlay.classList.remove('flex');
+        }, 300);
+    }
+
+    async handleLogin(e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const errorEl = document.getElementById('loginError');
+        const loginBtn = document.getElementById('loginBtn');
+
+        errorEl.classList.add('hidden');
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<span class="animate-spin material-symbols-outlined">sync</span> Checking...';
+
+        const authValue = 'Basic ' + btoa(username + ':' + password);
+
+        try {
+            const response = await fetch(`${API_URL}/verify-auth`, {
+                headers: { 'Authorization': authValue }
+            });
+
+            if (response.ok) {
+                this.auth = authValue;
+                localStorage.setItem('agent_auth', this.auth);
+                this.hideLogin();
+                this.checkHealth();
+                this.userInput.focus();
+            } else {
+                errorEl.classList.remove('hidden');
+            }
+        } catch (error) {
+            console.error('Login request failed:', error);
+            errorEl.textContent = 'Server unreachable. Check backend.';
+            errorEl.classList.remove('hidden');
+        } finally {
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = '<span>Sign In</span><span class="material-symbols-outlined text-[20px]">login</span>';
+        }
+    }
+
+    logout() {
+        this.auth = null;
+        localStorage.removeItem('agent_auth');
+        window.location.reload(); // Simplest way to reset state
     }
 
     autoResize() {
@@ -117,10 +221,17 @@ class ChatApp {
 
         try {
             // Use fetch for streaming to better control the flow and allow POST updates later if needed
-            // Actually standard query is GET, but let's stick to the URL structure
-            const response = await fetch(`${API_URL}/query-stream?query=${encodeURIComponent(query)}`);
+            const response = await fetch(`${API_URL}/query-stream?query=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': this.auth }
+            });
 
-            if (!response.ok) throw new Error('Network response was not ok');
+            if (!response.ok) {
+                if (response.status === 401) {
+                    this.logout();
+                    return;
+                }
+                throw new Error('Network response was not ok');
+            }
 
             await this.readStream(response.body.getReader(), statusEl, typingId);
 
@@ -575,7 +686,8 @@ class ChatApp {
     async clearHistory() {
         try {
             const response = await fetch(`${API_URL}/reset-history`, {
-                method: 'POST'
+                method: 'POST',
+                headers: { 'Authorization': this.auth }
             });
 
             if (response.ok) {
@@ -643,7 +755,10 @@ class ChatApp {
             try {
                 const response = await fetch(`${API_URL}/confirm-step`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': this.auth
+                    },
                     body: JSON.stringify({
                         session_id: data.session_id,
                         step_id: data.step_id,

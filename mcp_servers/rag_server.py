@@ -68,7 +68,7 @@ def pinecone_index_info() -> Dict[str, Any]:
 def search_meetings(
     query: str, 
     limit: int = 10,
-    min_similarity: float = 0.2, # Lowered slightly to let Reranker decide
+    min_similarity: float = 0.2, 
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     speaker: Optional[str] = None,
@@ -77,31 +77,86 @@ def search_meetings(
     max_results_per_meeting: int = 3
 ) -> Dict[str, Any]:
     """
-    Search with Retrieval-Augmented Generation best practices:
-    1. Pinecone Vector Search (High Recall) with Metadata Filtering
-    2. Cross-Encoder Reranking (High Precision)
+    Search specifically for meetings (transcripts, summaries).
+    Forces source_type='database' filter.
+    """
+    # Base filter: Must be a meeting
+    base_filter = {"source_type": "database"}
+    
+    # Specific meeting filter
+    if meeting_id:
+        base_filter["meeting_id"] = meeting_id
+
+    return _execute_rag_search(
+        query=query,
+        limit=limit,
+        min_similarity=min_similarity,
+        filter_dict=base_filter,
+        start_date=start_date,
+        end_date=end_date,
+        speaker=speaker,
+        deduplicate=deduplicate,
+        max_results_per_source=max_results_per_meeting,
+        source_key="meeting_id"
+    )
+
+@mcp.tool
+def search_documents(
+    query: str,
+    limit: int = 10,
+    min_similarity: float = 0.2,
+    deduplicate: bool = True,
+    max_results_per_document: int = 3
+) -> Dict[str, Any]:
+    """
+    Search for documents (PDFs, Docs, Text files) in the knowledge base.
+    Excludes meetings.
+    """
+    # Base filter: explicit exclusion of database (meetings) or check for absence of meeting_id
+    # We found existing docs don't have source_type, or it's not 'database'
+    base_filter = {"source_type": {"$ne": "database"}}
+
+    return _execute_rag_search(
+        query=query,
+        limit=limit,
+        min_similarity=min_similarity,
+        filter_dict=base_filter,
+        deduplicate=deduplicate,
+        max_results_per_source=max_results_per_document,
+        source_key="doc_id"
+    )
+
+def _execute_rag_search(
+    query: str,
+    limit: int,
+    min_similarity: float,
+    filter_dict: Dict[str, Any],
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    speaker: Optional[str] = None,
+    deduplicate: bool = True,
+    max_results_per_source: int = 3,
+    source_key: str = "meeting_id"
+) -> Dict[str, Any]:
+    """
+    Internal helper executing the standard RAG pipeline:
+    Embed -> Query Pinecone -> Python Filter -> Rerank -> Deduplicate
     """
     try:
         # 1. Generate Query Embedding
         query_embedding = get_embedding(query)
         
-        # 2. Build Pinecone Filters (Push-down predicates)
-        filter_dict = {}
-        
-        if meeting_id:
-            filter_dict["meeting_id"] = meeting_id
-            
-        # 3. Execute Search (Fetch MORE for Reranking)
+        # 2. Execute Search (Fetch MORE for Reranking)
         fetch_limit = 150 
         
         results = index.query(
             vector=query_embedding,
             top_k=fetch_limit,
             include_metadata=True,
-            filter=filter_dict if filter_dict else None
+            filter=filter_dict
         )
         
-        # 4. Initial Processing & Python-side Filtering (e.g. date, speaker)
+        # 3. Initial Processing & Python-side Filtering
         s_date = date_parser.parse(start_date).replace(tzinfo=timezone.utc) if start_date else None
         e_date = date_parser.parse(end_date).replace(tzinfo=timezone.utc) if end_date else None
         
@@ -119,11 +174,13 @@ def search_meetings(
                 except Exception:
                     pass
 
-            # Date range filtering (Python side due to metadata format)
+            # Date filtering
             match_dt = None
-            if metadata.get("date"):
+            # Try 'date' (meetings) or 'creation_date' (docs)
+            date_str = metadata.get("date") or metadata.get("creation_date")
+            if date_str:
                 try:
-                    match_dt = date_parser.parse(metadata["date"])
+                    match_dt = date_parser.parse(date_str)
                     if match_dt.tzinfo is None:
                         match_dt = match_dt.replace(tzinfo=timezone.utc)
                 except Exception:
@@ -134,7 +191,7 @@ def search_meetings(
             if e_date and match_dt and match_dt > e_date:
                 continue
 
-            # Speaker Filtering (Python side because 'contains' is hard in Pinecone)
+            # Speaker Filtering (Only for meetings usually)
             if speaker:
                 doc_speakers = metadata.get("speakers", "")
                 if not doc_speakers or speaker.lower() not in doc_speakers.lower():
@@ -147,50 +204,50 @@ def search_meetings(
             candidates.append({
                 "content": content,
                 "metadata": metadata,
-                "meeting_id": metadata.get("meeting_id"),
-                "initial_score": match.score, # Keep vector score for debug
+                "source_id": metadata.get(source_key) or metadata.get("doc_id"),
+                "initial_score": match.score,
                 "id": match.id
             })
 
-        # 5. RERANKING STEP (The Precision Fix)
+        # 4. RERANKING STEP
         if candidates:
             reranker = get_reranker_model()
-            
-            # Prepare pairs for Cross-Encoder: [Query, Document_Text]
             passages = [c["content"] for c in candidates]
             query_passage_pairs = [[query, p] for p in passages]
-            
-            # Predict scores (logits or normalized)
             rerank_scores = reranker.predict(query_passage_pairs)
             
-            # Assign new scores
             for i, candidate in enumerate(candidates):
                 candidate["relevance_score"] = float(rerank_scores[i])
-                candidate["type"] = "Vector + Reranker"
                 
-            # Sort by RERANKER score, not vector score
+            # Sort by RERANKER score
             candidates.sort(key=lambda x: x["relevance_score"], reverse=True)
+        else:
+            # Fallback if no candidates (though loop wouldn't run)
+            pass
         
-        # 6. Deduplication Logic
+        # 5. Deduplication
         final_results = []
         if deduplicate:
-            meeting_counts = {}
+            source_counts = {}
             for hit in candidates:
-                mid = hit["meeting_id"] or "unknown"
-                meeting_counts[mid] = meeting_counts.get(mid, 0) + 1
-                if meeting_counts[mid] <= max_results_per_meeting:
+                sid = hit["source_id"] or "unknown"
+                source_counts[sid] = source_counts.get(sid, 0) + 1
+                if source_counts[sid] <= max_results_per_source:
                     final_results.append(hit)
         else:
             final_results = candidates
 
-        # 7. Final Cut
+        # 6. Final Cut
         final_results = final_results[:limit]
         
         # Add display formatting
         for i, res in enumerate(final_results):
             res["rank"] = i + 1
             meta = res["metadata"]
-            res["citation_label"] = f"Meeting '{meta.get('name', 'Unknown')}' ({meta.get('date', 'Unknown')})"
+            if source_key == "meeting_id":
+                 res["citation_label"] = f"Meeting '{meta.get('name', 'Unknown')}' ({meta.get('date', 'Unknown')})"
+            else:
+                 res["citation_label"] = f"Document '{meta.get('file_name', 'Unknown')}'"
 
         return {
             "success": True, 

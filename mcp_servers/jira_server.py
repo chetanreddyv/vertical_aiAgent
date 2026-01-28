@@ -12,8 +12,7 @@ load_dotenv()
 
 # Initialize FastMCP server
 mcp = FastMCP(
-    name="Jira MCP Server",
-    dependencies=["jira", "python-dotenv"]
+    name="Jira MCP Server"
 )
 
 # Global Jira client

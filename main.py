@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import secrets
 from fastapi.responses import StreamingResponse
 import json
 import time
@@ -16,8 +18,9 @@ import agents
 
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    tldv_agent, general_agent, mysql_mcp, calendar_mcp, 
-    drive_mcp, rag_mcp, AgentSelection
+    manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
+    tldv_agent, jira_agent, general_agent, mysql_mcp, calendar_mcp, 
+    drive_mcp, rag_mcp, jira_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
 from executor import PlanExecutor
@@ -42,6 +45,31 @@ plan_executor: Optional[PlanExecutor] = None
 # manager_agent remains unlimited (default)
 SPECIALIST_LIMITS = UsageLimits(request_limit=10, tool_calls_limit=5)
 
+security = HTTPBasic()
+
+def check_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    # Read from environment variables - FAIL if not set for security
+    expected_username = os.getenv("BASIC_AUTH_USERNAME")
+    expected_password = os.getenv("BASIC_AUTH_PASSWORD")
+
+    if not expected_username or not expected_password:
+        logger.error("Basic Auth credentials not set in environment variables")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server authentication misconfigured",
+        )
+    
+    is_correct_username = secrets.compare_digest(credentials.username, expected_username)
+    is_correct_password = secrets.compare_digest(credentials.password, expected_password)
+    
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
 
 def keep_last_n_turns(message_history: list, n_turns: int = 15) -> list:
     """Keep only the last N conversation turns (user + assistant pairs)."""
@@ -58,6 +86,7 @@ def get_agent_by_name(name: str):
         "drive": drive_agent,
         "calendar": calendar_agent,
         "tldv": tldv_agent,
+        "jira": jira_agent,
         "general": general_agent
     }
     return agents_map.get(name, general_agent)
@@ -74,7 +103,8 @@ async def lifespan(app: FastAPI):
         sql_agent.run_mcp_servers(),
         calendar_agent.run_mcp_servers(),
         drive_agent.run_mcp_servers(),
-        tldv_agent.run_mcp_servers()
+        tldv_agent.run_mcp_servers(),
+        jira_agent.run_mcp_servers()
     ):
         # Initialize agents (load schema, create dependencies)
         try:
@@ -98,6 +128,7 @@ async def lifespan(app: FastAPI):
             "drive": drive_agent,
             "calendar": calendar_agent,
             "tldv": tldv_agent,
+            "jira": jira_agent,
             "general": general_agent
         }
         plan_executor = PlanExecutor(agents_map)
@@ -115,9 +146,15 @@ app = FastAPI(
 )
 
 # CORS middleware
+# IMPORTANT: When allow_credentials is True, allow_origins cannot be ["*"]
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,11 +190,16 @@ async def root():
     return {
         "status": "online",
         "service": "AI Agent API",
-        "agents": ["email", "sql", "drive", "calendar", "tldv", "general"]
+        "agents": ["email", "sql", "drive", "calendar", "tldv", "jira", "general"]
     }
 
+@app.get("/verify-auth")
+async def verify_auth(username: str = Depends(check_auth)):
+    """Simple endpoint to verify credentials"""
+    return {"status": "authenticated", "user": username}
+
 @app.post("/query", response_model=QueryResponse)
-async def process_query(request: QueryRequest):
+async def process_query(request: QueryRequest, username: str = Depends(check_auth)):
     """
     Process a user query through the Manager Agent orchestration system
     """
@@ -457,21 +499,21 @@ async def confirm_step_stream_generator(confirmation: StepConfirmation):
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
 @app.get("/query-stream")
-async def stream_query(query: str):
+async def stream_query(query: str, username: str = Depends(check_auth)):
     return StreamingResponse(
         query_stream_generator(query),
         media_type="text/event-stream"
     )
 
 @app.post("/confirm-step")
-async def confirm_step(confirmation: StepConfirmation):
+async def confirm_step(confirmation: StepConfirmation, username: str = Depends(check_auth)):
     return StreamingResponse(
         confirm_step_stream_generator(confirmation),
         media_type="text/event-stream"
     )
 
 @app.post("/reset-history")
-async def reset_history():
+async def reset_history(username: str = Depends(check_auth)):
     """Clear conversation history and paused execution states"""
     global conversation_history, paused_states
     conversation_history.clear()
@@ -503,12 +545,14 @@ async def health_check():
             "drive": "ready",
             "calendar": "ready",
             "tldv": "ready",
+            "jira": "ready",
             "general": "ready"
         },
         "mcp_servers": {
             "mysql": "connected",
             "calendar": "connected",
             "drive": "connected",
+            "jira": "connected",
             "tldv": "connected"
         },
         "schema_loaded": sql_deps is not None and sql_deps.schema_text != "Schema unavailable."
@@ -516,4 +560,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False)

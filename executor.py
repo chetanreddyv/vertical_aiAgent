@@ -6,6 +6,7 @@ from agents import ExecutionPlan, Step, Agent, AgentSelection,  mysql_mcp
 from pydantic_ai import UsageLimits
 import time
 from utils import format_query_results
+from langfuse import observe
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class PlanExecutor:
         
         return resolved_instruction
 
+    @observe()
     async def execute_step(self, step: Step, context: str, sql_deps=None) -> Any:
         """
         Execute a single step using the appropriate agent.
@@ -87,6 +89,7 @@ class PlanExecutor:
             
         return result
 
+    @observe()
     async def execute_plan(self, plan: ExecutionPlan, context: str, sql_deps=None, start_step_index: int = 0):
         """
         Execute the entire plan sequentially.

@@ -22,3 +22,6 @@ langchain-google-genai
 
 langchain-community
 rapidfuzz
+langfuse
+jira
+python-dateutil

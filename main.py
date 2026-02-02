@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ModelRequest, UserPromptPart
 from pydantic_ai import UsageLimits
+from langfuse import observe, Langfuse
 
 # Import the client agents and utilities
 import agents
@@ -199,6 +200,7 @@ async def verify_auth(username: str = Depends(check_auth)):
     return {"status": "authenticated", "user": username}
 
 @app.post("/query", response_model=QueryResponse)
+@observe()
 async def process_query(request: QueryRequest, username: str = Depends(check_auth)):
     """
     Process a user query through the Manager Agent orchestration system
@@ -307,6 +309,7 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
             error=str(e)
         )
 
+@observe()
 async def query_stream_generator(query: str):
     """Generate status updates during query processing"""
     global conversation_history, paused_states
@@ -420,6 +423,7 @@ async def query_stream_generator(query: str):
         logger.error(f"❌ Error processing query stream: {e}", exc_info=True)
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
+@observe()
 async def confirm_step_stream_generator(confirmation: StepConfirmation):
     """Resume execution after confirmation"""
     global paused_states, conversation_history

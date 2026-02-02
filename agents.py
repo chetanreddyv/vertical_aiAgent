@@ -9,6 +9,7 @@ import logging
 import time
 from dotenv import load_dotenv
 from utils import format_schema_rows
+from langfuse import observe
 
 load_dotenv()
 
@@ -391,6 +392,7 @@ general_agent = Agent(
     )
 )
 
+@observe()
 async def initialize_agents() -> SqlDeps:
     """Initialize agents and return SQL dependencies for dependency injection."""
     logger.info("🎬 Starting Agents Initialization...")

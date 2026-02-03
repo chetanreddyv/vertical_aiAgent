@@ -48,10 +48,11 @@ graph TD
 ## 🌟 Key Features
 
 ### 1. Intelligent Orchestration (The Manager)
-The **Manager Agent** (powered by Gemini) analyzes intent and generates a structured `ExecutionPlan`.
-- **Dependency Resolution**: Steps can depend on outputs from previous steps.
-- **Input Templating**: Use `{{steps.s1.output}}` to pass data dynamically.
-- **Clarification Loop**: If a request is ambiguous (e.g., "Send an email" without a recipient), the manager pauses to ask clarifying questions.
+The **Manager Agent** (powered by Gemini) acts as the system's brain. It analyzes user intent, considers temporal context (today's date, time), and generates a structured `ExecutionPlan`.
+- **Intent Rewriting**: Converts vague user queries into precise, actionable steps.
+- **Dependency Resolution**: Steps can depend on outputs from previous steps (e.g., "Use the email address found in Step 1").
+- **Input Templating**: Use `{{steps.s1.output}}` to pass data dynamically between agents.
+- **Clarification Loop**: If a request is ambiguous, the manager pauses to ask clarifying questions before proceeding.
 
 ### 2. Specialized Agent Fleet
 Each agent is a domain expert with specific tools (via MCP):
@@ -60,14 +61,43 @@ Each agent is a domain expert with specific tools (via MCP):
 - **🗄️ SQL Expert**: Expert in business schemas (Salesforce/Lead data). Generates and executes safe, read-only MySQL queries.
 - **📄 Drive Agent**: Manage files and read document contents across Google Drive.
 - **🎙️ TLDV (Meeting RAG)**: Semantic search across past meeting transcripts using Pinecone and vector embeddings.
+- **🐞 Jira Agent**: Project management automation. Search issues, create tasks/bugs, update statuses, and add comments to Jira projects.
 
-### 3. Transparent Execution
+### 3. 🛡️ Human-in-the-Loop Safety
+Safety is paramount in agentic systems. The executor implements a robust **Confirmation Layer**:
+- **High-Risk Actions**: Steps involving data mutation (sending emails, updating databases, deleting files) are flagged.
+- **User Approval**: The system pauses execution and requests explicit user confirmation before proceeding with these steps.
+- **Modifiability**: Users can edit the agent's proposed action (e.g., rewriting an email draft) before approving it.
+
+### 4. Transparent Execution
 - **Streaming Status**: Real-time feedback on what the agents are doing ("Step 1: SQL Agent working...").
 - **Deterministic Passing**: Explicit data passing between steps ensures accuracy and prevents "hallucinated actions".
 
 ---
 
-## 🛠️ Technical Stack
+## � Common Application Use Cases
+
+### 🏢 Enterprise CRM Automation
+**"Find all high-value leads from last month and draft a follow-up email."**
+1.  **SQL Agent**: Queries Salesforce DB for leads with `Amount > $10k` created in the last 30 days.
+2.  **Manager**: Formats the list of leads.
+3.  **Email Agent**: Drafts a personalized outreach email for each lead (pauses for user review).
+
+### 📅 Intelligent Scheduling
+**"Schedule a sync with the engineering team to discuss the Q3 roadmap based on the last meeting's notes."**
+1.  **TLDV Agent**: Searches past meeting transcripts for "Q3 roadmap" action items.
+2.  **Calendar Agent**: Checks availability for all participants mentioned in the notes.
+3.  **Calendar Agent**: Creates a Google Meet event with the agenda derived from the transcript.
+
+### 🐞 Automated Bug Triage
+**"Check the latest error logs in Drive and create Jira tickets for critical issues."**
+1.  **Drive Agent**: Reads the latest log file from the "Server Logs" folder.
+2.  **Manager**: Parses the logs to identify "CRITICAL" error lines.
+3.  **Jira Agent**: Creates a new bug ticket in the 'ENG' project for each critical error, attaching the log snippet.
+
+---
+
+## �🛠️ Technical Stack
 
 - **Framework**: [Pydantic AI](https://logfire.pydantic.dev/docs/pydantic-ai/) - For structured, type-safe agent interactions.
 - **Protocol**: [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) - Standardized communication with external tools.
@@ -75,6 +105,13 @@ Each agent is a domain expert with specific tools (via MCP):
 - **Backend**: FastAPI with Server-Sent Events (SSE) for streaming.
 - **Vector DB**: Pinecone (for meeting context retrieval).
 - **Database**: MySQL (for business data).
+- **Observability**: [Langfuse](https://langfuse.com/) - For tracing agent steps, monitoring latency, and debugging LLM calls.
+
+## 📊 Evaluation Framework
+The project includes a robust evaluation pipeline using **RAGAS** (Retrieval Augmented Generation Assessment) to benchmark agent performance:
+- **Synthetic Testset Generation**: Automatically generates complex test cases based on seed documents (`evaluation/generate_testset.py`).
+- **Metrics**: Measures **Faithfulness**, **Answer Relevancy**, **Context Precision**, and **Context Recall**.
+- **Reporting**: Outputs detailed CSV reports to track improvements in agent accuracy over time (`evaluation/evaluate_rag.py`).
 
 ---
 

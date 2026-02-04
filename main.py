@@ -309,7 +309,7 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
             error=str(e)
         )
 
-@observe()
+@observe(capture_output=False)
 async def query_stream_generator(query: str):
     """Generate status updates during query processing"""
     global conversation_history, paused_states
@@ -423,7 +423,7 @@ async def query_stream_generator(query: str):
         logger.error(f"❌ Error processing query stream: {e}", exc_info=True)
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
-@observe()
+@observe(capture_output=False)
 async def confirm_step_stream_generator(confirmation: StepConfirmation):
     """Resume execution after confirmation"""
     global paused_states, conversation_history

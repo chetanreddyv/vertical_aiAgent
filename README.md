@@ -20,27 +20,38 @@ The system follows a triple-stage execution model: **Planning** → **Execution*
 
 ```mermaid
 graph TD
-    User([User Query]) --> Manager[Manager Agent]
+    User([User Query]) --> Manager["Manager Agent (Gemini)"]
     
-    subgraph Planning Phase
-        Manager --> Plan[Execution Plan]
-        Plan --> Steps{Sequential Steps}
+    subgraph Preparation["1. Planning Phase"]
+        Manager --> Plan["Execution Plan (Steps 1..N)"]
     end
     
-    subgraph Execution Phase
-        Steps --> s1[Step 1: Specialist A]
-        Steps --> s2[Step 2: Specialist B]
-        s1 -- Context/Outputs --> s2
+    subgraph Runtime["2. Iterative Execution Phase"]
+        Plan --> StepLoop{"Next Step (i)"}
+        StepLoop -- "Agent Choice" --> Exec["Specialist Agent Selection"]
+        
+        Exec --> ConfCheck{"Requires Confirmation?"}
+        
+        ConfCheck -- "Yes (Mutation Task)" --> HITL["Human-in-the-Loop Approval"]
+        HITL -- "Approved/Edited" --> Resume["Resume Execution"]
+        Resume --> ToolCall
+        
+        ConfCheck -- "No" --> ToolCall["MCP Tool Call"]
+        
+        subgraph Tools["3. Tool Layer (MCP Servers)"]
+            ToolCall -- "Standardized Protocol" --> MCPServers["mcp_servers/"]
+            MCPServers --> DBs[(SQL/Vector DBs)]
+            MCPServers --> APIs[[Gmail/Drive/Calendar/Jira]]
+        end
+        
+        ToolCall -- "Output Context" --> UpdateContext["Context Accumulator"]
+        UpdateContext --> StepLoop
+        StepLoop -- "Task Complete" --> Synth["Synthesis Agent"]
     end
     
-    subgraph Specialist Agents
-        s1 -- MCP --> SQL[(MySQL DB)]
-        s1 -- MCP --> Google[Google Workspace]
-        s2 -- MCP --> RAG[(Meeting RAG)]
+    subgraph Delivery["4. Delivery Phase"]
+        Synth --> Final([Final Response])
     end
-    
-    s2 --> Synth[Synthesis Agent]
-    Synth --> Final([Final Response])
 ```
 
 ---

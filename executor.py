@@ -14,6 +14,7 @@ class PlanExecutor:
     def __init__(self, agents_map: Dict[str, Agent]):
         self.agents_map = agents_map
         self.step_outputs: Dict[str, str] = {}
+        self.sources: set[str] = set()
         self.sql_data: Optional[Dict[str, Any]] = None
 
     def resolve_inputs(self, text: str) -> str:
@@ -101,6 +102,7 @@ class PlanExecutor:
         """
         if start_step_index == 0:
             self.step_outputs = {}
+            self.sources = set()
             self.sql_data = None
         results_summary = []
 
@@ -190,7 +192,14 @@ class PlanExecutor:
 
             try:
                 result = await self.execute_step(step, context, sql_deps)
-                output_str = str(result.output)
+                
+                # Handle structured CitableResult
+                if hasattr(result.output, 'answer') and hasattr(result.output, 'sources'):
+                    output_str = result.output.answer
+                    if result.output.sources:
+                        self.sources.update(result.output.sources)
+                else:
+                    output_str = str(result.output)
                 
                 # Store output for future steps
                 self.step_outputs[step.id] = output_str
@@ -239,6 +248,10 @@ class PlanExecutor:
         yield {"type": "status", "content": "Synthesizing final response..."}
         
         final_context = f"Original Query: {context}\n\nExecution Results:\n" + "\n".join(results_summary)
+        
+        if self.sources:
+            final_context += "\n\nVerified Sources:\n- " + "\n- ".join(sorted(list(self.sources)))
+            
         final_context += f"\n\nInstruction: {plan.final_response_instruction}"
         
         # Use general agent for synthesis

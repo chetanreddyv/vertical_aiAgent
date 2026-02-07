@@ -73,6 +73,10 @@ class sql(BaseModel):
     explanation: Optional[str] = Field(None, description="A brief explanation of what the query does.")
     database: Optional[str] = Field(None, description="The specific database to query. Defaults to Salesforce if not specified.")
 
+class CitableResult(BaseModel):
+    answer: str = Field(..., description="The factual answer based on the retrieved information.")
+    sources: list[str] = Field(default_factory=list, description="List of source labels or citations used to form the answer.")
+
 # -------- MCP Server Initializations --------
 
 # MySQL
@@ -205,6 +209,7 @@ email_agent = Agent(
 
 drive_agent = Agent(
     "google-gla:gemini-3-flash-preview",
+    output_type=CitableResult,
     system_prompt=(
         "You are a Google Drive file management and knowledge assistant.\n\n"
         "Capabilities:\n"
@@ -219,7 +224,10 @@ drive_agent = Agent(
         "  - If the user asks for *files themselves* (e.g., 'List my PDF files', 'Find the file named report.pdf'), use `search_files` (Drive API).\n"
         "- **RAG Search (`search_documents`)**:\n"
         "  - Use this for open-ended questions about knowledge.\n"
-        "  - Results include 'citation_label' and snippets. Cite these in your answer.\n"
+        "  - Results include 'citation_label' and snippets.\n"
+        "- **Citations**:\n"
+        "  - Populate the `sources` field in your output with the `citation_label` of every document used.\n"
+        "  - Do not include citations in the `answer` text; keep them in the `sources` list.\n"
         "- **Drive Management**:\n"
         "  - Provide clear file listings with names, types, and sizes.\n"
         "  - Report upload/download progress.\n"
@@ -254,6 +262,7 @@ calendar_agent = Agent(
 
 tldv_agent = Agent(
     "google-gla:gemini-3-flash-preview",
+    output_type=CitableResult,
     system_prompt=(
         "You are a TLDV Meeting Notetaker assistant with advanced search capabilities.\n\n"
         "## Core Capabilities\n"
@@ -277,17 +286,15 @@ tldv_agent = Agent(
         "2. **Interpret results carefully**:\n"
         "   - **Score 0.3 - 0.45**: Potential match. Review content carefully.\n"
         "   - **Score > 0.45**: High confidence match.\n"
-        "   - Use `citation_label` for referencing sources.\n"
+        "   - Use `citation_label` for the `sources` field.\n"
         "   - Use `metadata` to add context (date, speakers, meeting title)\n"
-        "5. **Citation**: Always cite which meeting(s) information came from using metadata.\n"
+        "5. **Citation**: Populate the `sources` field in your output with the `citation_label` of every meeting used.\n"
         "6. **Multi-step searches**: If first search is too narrow, try broader query or lower threshold.\n\n"
         "## Response Format\n"
         "When presenting results:\n"
-        "- Start with direct answer\n"
-        "- Cite source: 'According to the [meeting title] on [date]...'\n"
-        "- If multiple meetings: Group by meeting or chronologically\n"
-        "- Include speaker attribution when relevant\n"
-        "- If low confidence (similarity < 0.6): 'Based on possibly related discussions...'\n\n"
+        "- Put the synthesis in the `answer` field.\n"
+        "- Put all unique meeting citations in the `sources` field.\n"
+        "- Do not include citations in the `answer` text itself; the system handles those separately.\n\n"
         "## Important Distinctions\n"
         "- You handle PAST meeting content (transcripts, what was said)\n"
         "- For FUTURE meetings (scheduling, invites) → defer to Calendar agent\n"
@@ -387,6 +394,13 @@ general_agent = Agent(
         "- Use examples when helpful\n"
         "- Admit when you don't know something\n"
         "- Be conversational and friendly\n\n"
+        "## Synthesis Guidelines\n"
+        "When you are synthesizing results from other agents:\n"
+        "1. Focus on the factual content provided in the `Execution Results`.\n"
+        "2. **SOURCES & CITATIONS**: You will be provided with a list of 'Verified Sources'.\n"
+        "   - You MUST include a 'Sources & Citations' section at the end of your response.\n"
+        "   - List all verified sources provided to you in a clean markdown list.\n"
+        "   - Do not hallucinate sources; only use the ones explicitly provided.\n\n"
         "Note: You don't have access to external tools for general queries. "
         "Inform users if they need specific functionality like email or database access."
     )

@@ -22,13 +22,24 @@ def get_jira_client() -> JIRA:
     """Initialize and return Jira client"""
     global _jira_client
     if _jira_client is None:
-        _jira_client = JIRA(
-            server=os.getenv("JIRA_URL"),
-            basic_auth=(
-                os.getenv("JIRA_USERNAME"),
-                os.getenv("JIRA_API_TOKEN")
+        jira_url = os.getenv("JIRA_URL")
+        jira_pat = os.getenv("JIRA_PAT")
+        
+        if jira_pat:
+            # Bearer Token (PAT) Authentication for Jira Server/Data Center
+            _jira_client = JIRA(
+                server=jira_url,
+                token_auth=jira_pat
             )
-        )
+        else:
+            # Basic Authentication fallback (Cloud)
+            _jira_client = JIRA(
+                server=jira_url,
+                basic_auth=(
+                    os.getenv("JIRA_USERNAME"),
+                    os.getenv("JIRA_API_TOKEN")
+                )
+            )
     return _jira_client
 
 # ==================== SEARCH & RETRIEVAL ====================

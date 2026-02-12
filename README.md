@@ -72,7 +72,7 @@ Each agent is a domain expert with specific tools (via MCP):
 - **🗄️ SQL Expert**: Expert in business schemas (Salesforce/Lead data). Generates and executes safe, read-only MySQL queries.
 - **📄 Drive Agent**: Manage files and read document contents across Google Drive.
 - **🎙️ TLDV (Meeting RAG)**: Semantic search across past meeting transcripts using Pinecone and vector embeddings.
-- **🐞 Jira Agent**: Project management automation. Search issues, create tasks/bugs, update statuses, and add comments to Jira projects.
+- **🐞 Jira Agent**: Project management automation for **Jira Data Center** and **Jira Cloud**. Search issues, create tasks/bugs, update statuses, and add comments using Personal Access Tokens (PAT).
 
 ### 3. 🛡️ Human-in-the-Loop Safety
 Safety is paramount in agentic systems. The executor implements a robust **Confirmation Layer**:
@@ -160,6 +160,8 @@ The project includes a robust evaluation pipeline using **RAGAS** (Retrieval Aug
    PINECONE_INDEX_NAME=drive-rag
    GOOGLE_OAUTH_CLIENT_ID=...
    GOOGLE_OAUTH_CLIENT_SECRET=...
+   JIRA_URL=https://your-jira-domain.com
+   JIRA_PAT=your_personal_access_token
    ```
 
 4. **Initialize MCP Servers**:

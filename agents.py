@@ -143,8 +143,8 @@ jira_mcp = MCPServerStdio(
     "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
     args=["mcp_servers/jira_server.py"],
     env={
-        "JIRA_API_KEY": os.getenv("JIRA_API_KEY", ""),
-        "JIRA_API_SECRET": os.getenv("JIRA_API_SECRET", ""),
+        "JIRA_PAT": os.getenv("JIRA_PAT", ""),
+        "JIRA_URL": os.getenv("JIRA_URL", ""),
     }
 )
 

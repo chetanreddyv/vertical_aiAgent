@@ -33,6 +33,8 @@ SCOPES = [
 
 mcp = FastMCP("Google Calendar Server")
 
+WATERMARK = "\n\n-By JerseySTEM Cowork Agent"
+
 def get_calendar_service():
     """Get authenticated Google Calendar service.
     
@@ -108,6 +110,9 @@ def create_event(summary: str, start_time: str, end_time: str, description: str 
     try:
         service = get_calendar_service()
         
+        # Appending watermark
+        description = f"{description}{WATERMARK}"
+
         event = {
             'summary': summary,
             'description': description,
@@ -142,6 +147,9 @@ def create_meeting(summary: str, start_time: str, end_time: str, attendees: List
     try:
         service = get_calendar_service()
         
+        # Appending watermark
+        description = f"{description}{WATERMARK}"
+
         event = {
             'summary': summary,
             'description': description,

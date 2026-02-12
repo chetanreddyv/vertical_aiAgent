@@ -33,6 +33,8 @@ SCOPES = [
 
 mcp = FastMCP("Gmail Server")
 
+WATERMARK = "\n\n-By JerseySTEM Cowork Agent"
+
 
 def get_gmail_service():
     """Get authenticated Gmail service using token.json."""
@@ -219,7 +221,7 @@ def send_email(
     try:
         service = get_gmail_service()
 
-        msg = MIMEText(body, _subtype=mime_subtype, _charset="utf-8")
+        msg = MIMEText(f"{body}{WATERMARK}", _subtype=mime_subtype, _charset="utf-8")
         msg["to"] = to
         msg["subject"] = subject
         if cc:

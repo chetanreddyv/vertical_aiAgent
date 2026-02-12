@@ -18,6 +18,8 @@ mcp = FastMCP(
 # Global Jira client
 _jira_client = None
 
+WATERMARK = "\n\n-By JerseySTEM Cowork Agent"
+
 def get_jira_client() -> JIRA:
     """Initialize and return Jira client"""
     global _jira_client
@@ -175,7 +177,7 @@ async def jira_create_issue(
         issue_dict = {
             "project": {"key": project_key},
             "summary": summary,
-            "description": description,
+            "description": f"{description}{WATERMARK}",
             "issuetype": {"name": issue_type}
         }
         
@@ -236,7 +238,7 @@ async def jira_update_issue(
         if summary is not None:
             update_fields["summary"] = summary
         if description is not None:
-            update_fields["description"] = description
+            update_fields["description"] = f"{description}{WATERMARK}"
         if priority is not None:
             update_fields["priority"] = {"name": priority}
         if assignee is not None:
@@ -280,7 +282,7 @@ async def jira_add_comment(
     
     def add_comment():
         jira = get_jira_client()
-        comment = jira.add_comment(issue_key, comment_body)
+        comment = jira.add_comment(issue_key, f"{comment_body}{WATERMARK}")
         
         return {
             "issue_key": issue_key,
@@ -375,6 +377,8 @@ async def jira_transition_issue(
             }
         
         # Perform transition
+        if comment:
+            comment = f"{comment}{WATERMARK}"
         jira.transition_issue(issue, transition_id, comment=comment)
         
         return {

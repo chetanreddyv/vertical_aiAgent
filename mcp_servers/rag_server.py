@@ -11,7 +11,9 @@ from typing import Dict, Any, List, Optional
 import os
 from dotenv import load_dotenv
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer, CrossEncoder # Added CrossEncoder
+from google import genai
+from google.genai import types
+from sentence_transformers import CrossEncoder # Keep CrossEncoder for reranking
 from datetime import datetime, timezone
 import json
 from dateutil import parser as date_parser
@@ -23,35 +25,32 @@ mcp = FastMCP("TLDV RAG Server")
 
 # Initialize Pinecone
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index_name = os.getenv("PINECONE_INDEX_NAME", "drive-rag")
-index = pc.Index(index_name)
+index_name = os.getenv("PINECONE_INDEX_NAME", "meeting-transcripts-v3")
+index_host = os.getenv("PINECONE_HOST")
+index = pc.Index(index_name, host=index_host) if index_host else pc.Index(index_name)
 
-# --- Global Models (Lazy Loaded) ---
-_embedding_model = None
-_reranker_model = None
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        # Upgraded default model from MiniLM-L6 to mpnet-base for better semantic capture
-        model_name = os.getenv("PINECONE_MODEL", "all-mpnet-base-v2") 
-        print(f"Loading Embedding Model: {model_name}...")
-        _embedding_model = SentenceTransformer(model_name)
-    return _embedding_model
-
-def get_reranker_model():
-    global _reranker_model
-    if _reranker_model is None:
-        # Specialized model for re-sorting retrieved results
-        model_name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-        print(f"Loading Reranker Model: {model_name}...")
-        _reranker_model = CrossEncoder(model_name)
-    return _reranker_model
+# Initialize Gemini
+genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def get_embedding(text: str) -> List[float]:
-    model = get_embedding_model()
-    # Normalize embeddings for cosine similarity
-    return model.encode(text, normalize_embeddings=True).tolist()
+    """Generate embedding using Google Gemini model via new google-genai SDK."""
+    model_name = os.getenv("PINECONE_MODEL", "text-embedding-004")
+    # google-genai handles 'text-embedding-004' directly
+    
+    result = genai_client.models.embed_content(
+        model=model_name,
+        contents=text,
+        config=types.EmbedContentConfig(
+            task_type="RETRIEVAL_QUERY",
+            output_dimensionality=768
+        )
+    )
+    # result.embeddings is a list of Embeddings objects if contents is a list, 
+    # or a single Embedding object if contents is a string (actually it's always a list in some versions)
+    # Let's check the structure. If it's a list, we take the first one.
+    if isinstance(result.embeddings, list):
+        return result.embeddings[0].values
+    return result.embeddings.values
 
 @mcp.tool
 def pinecone_index_info() -> Dict[str, Any]:
@@ -81,7 +80,7 @@ def search_meetings(
     Forces source_type='database' filter.
     """
     # Base filter: Must be a meeting
-    base_filter = {"source_type": "database"}
+    base_filter = {"source_type": "tldv transcripts"}
     
     # Specific meeting filter
     if meeting_id:
@@ -114,7 +113,7 @@ def search_documents(
     """
     # Base filter: explicit exclusion of database (meetings) or check for absence of meeting_id
     # We found existing docs don't have source_type, or it's not 'database'
-    base_filter = {"source_type": {"$ne": "database"}}
+    base_filter = {"source_type": "google_drive"}
 
     return _execute_rag_search(
         query=query,
@@ -193,8 +192,19 @@ def _execute_rag_search(
 
             # Speaker Filtering (Only for meetings usually)
             if speaker:
-                doc_speakers = metadata.get("speakers", "")
-                if not doc_speakers or speaker.lower() not in doc_speakers.lower():
+                doc_speakers = metadata.get("speakers")
+                if not doc_speakers:
+                    continue
+                
+                # Handle list or string
+                if isinstance(doc_speakers, list):
+                    if not any(speaker.lower() in s.lower() for s in doc_speakers):
+                        continue
+                elif isinstance(doc_speakers, str):
+                    if speaker.lower() not in doc_speakers.lower():
+                        continue
+                else:
+                    # Fallback for unexpected types
                     continue
 
             # Initial threshold check (loose)
@@ -211,7 +221,10 @@ def _execute_rag_search(
 
         # 4. RERANKING STEP
         if candidates:
-            reranker = get_reranker_model()
+            # Re-ranker model (Lazy loaded)
+            reranker_model_name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+            reranker = CrossEncoder(reranker_model_name)
+            
             passages = [c["content"] for c in candidates]
             query_passage_pairs = [[query, p] for p in passages]
             rerank_scores = reranker.predict(query_passage_pairs)
@@ -244,10 +257,15 @@ def _execute_rag_search(
         for i, res in enumerate(final_results):
             res["rank"] = i + 1
             meta = res["metadata"]
+            
+            # Simplified labeling: both use 'name' in the new index
+            title = meta.get("name") or meta.get("file_name") or "Unknown"
+            
             if source_key == "meeting_id":
-                 res["citation_label"] = f"Meeting '{meta.get('name', 'Unknown')}' ({meta.get('date', 'Unknown')})"
+                 m_date = meta.get("date") or meta.get("creation_date") or "Unknown Date"
+                 res["citation_label"] = f"Meeting '{title}' ({m_date})"
             else:
-                 res["citation_label"] = f"Document '{meta.get('file_name', 'Unknown')}'"
+                 res["citation_label"] = f"Document '{title}'"
 
         return {
             "success": True, 

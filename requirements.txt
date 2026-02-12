@@ -10,7 +10,8 @@ google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 uvicorn
-google-generativeai
+google-genai
+# google-generativeai (deprecated)
 # notecard
 pinecone
 sentence-transformers

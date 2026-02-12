@@ -131,8 +131,9 @@ rag_mcp = MCPServerStdio(
     args=["mcp_servers/rag_server.py"],
     env={
         "PINECONE_API_KEY": os.getenv("PINECONE_API_KEY", ""),
-        "PINECONE_INDEX_NAME": os.getenv("PINECONE_INDEX_NAME", "drive-rag"),
-        "PINECONE_MODEL": os.getenv("PINECONE_MODEL", "all-MiniLM-L6-v2"),
+        "PINECONE_INDEX_NAME": os.getenv("PINECONE_INDEX_NAME", "meeting-transcripts-v3"),
+        "PINECONE_MODEL": os.getenv("PINECONE_MODEL", "gemini-embedding-001"),
+        "PINECONE_HOST": os.getenv("PINECONE_HOST", ""),
         "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
     },
     timeout=120,

@@ -1,6 +1,4 @@
 pydantic_ai
-openai
-uv
 fastmcp
 pymysql
 python-dotenv
@@ -16,3 +14,4 @@ cohere
 langfuse
 jira
 python-dateutil
+numpy

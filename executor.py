@@ -7,6 +7,8 @@ from pydantic_ai import UsageLimits
 import time
 from utils import format_query_results
 from langfuse import observe
+from grounding import check_grounding
+from pydantic_ai.messages import ToolReturnPart
 
 logger = logging.getLogger(__name__)
 
@@ -190,12 +192,47 @@ class PlanExecutor:
                 }
                 return # Stop execution here. State is preserved in main.py
 
+
+
             try:
                 result = await self.execute_step(step, context, sql_deps)
+                
+                # Capture retrieved chunks for grounding check
+                retrieved_chunks = []
+                # Inspect messages for tool returns
+                # We look for 'search_meetings' or 'search_documents'
+                for msg in reversed(result.new_messages()): # Start from end to get latest
+                     if hasattr(msg, 'parts'):
+                         for part in msg.parts:
+                             if isinstance(part, ToolReturnPart):
+                                 if part.tool_name in ['search_meetings', 'search_documents']:
+                                     # The content is a dict (or parsed to one)
+                                     tool_output = part.content
+                                     if isinstance(tool_output, dict) and tool_output.get('success'):
+                                          retrieved_chunks.extend(tool_output.get('results', []))
                 
                 # Handle structured CitableResult
                 if hasattr(result.output, 'answer') and hasattr(result.output, 'sources'):
                     output_str = result.output.answer
+                    
+                    # GROUNDING CHECK
+                    if retrieved_chunks:
+                        grounding_result = check_grounding(output_str, retrieved_chunks)
+                        score = grounding_result.get('score', 0.0)
+                        
+                        logger.info(f"Grounding Score: {score}")
+                        yield {"type": "status", "content": f"Grounding Similarity Score: {score:.2f}"}
+
+                        if score < 0.70:
+                            logger.warning(f"Low grounding score ({score}) for step {step.id}. Replacing response.")
+                            output_str = "I could not find enough information in the retrieved context to answer this question accurately."
+                            # Optionally clear sources or keep them? Plan says keep them.
+                            # We should probably update the result object too if we were passing it on, 
+                            # but here we just update 'output_str' which goes into step_outputs.
+                            
+                            # Also update the CitableResult object in case it's used elsewhere?
+                            result.output.answer = output_str
+
                     if result.output.sources:
                         self.sources.update(result.output.sources)
                 else:

@@ -1,0 +1,28 @@
+# Helper files
+.gitignore
+.vercelignore
+requirements.txt
+README.md
+task.md
+todo.md
+sql_context.md
+
+# Virtual Environment
+.venv/
+venv/
+__pycache__/
+
+# Tests and Docs
+tests/
+docs/
+rag_docs/
+
+# Git
+.git/
+
+# Bytecode
+*.pyc
+
+# Local Config
+.env
+token.json

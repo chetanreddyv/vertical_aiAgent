@@ -104,49 +104,4 @@ def format_query_results(result_data):
     
     return output
 
-import os
-import json
-from typing import List, Dict, Any
 
-def check_grounding(response_text: str, retrieved_context: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Evaluates if the response is supported by the retrieved context.
-    Uses a lightweight LLM call to verify claims.
-    """
-    try:
-        import openai
-        client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        
-        context_str = "\n\n".join([
-            f"Chunk {i+1}: {c.get('content', '')} (Source: {c.get('citation_label', 'Unknown')})"
-            for i, c in enumerate(retrieved_context)
-        ])
-        
-        prompt = f"""
-        You are a hallucination detector. 
-        Verify if the following Response is fully supported by the Context.
-        
-        Context:
-        {context_str[:15000]} -- Truncated if too long
-        
-        Response:
-        {response_text}
-        
-        Task:
-        1. Identify key claims in the response.
-        2. Check if each claim is supported by the context.
-        3. Assign a grounding score (0.0 - 1.0).
-        
-        Return JSON: {{ "score": float, "analysis": "string explanation", "supported": boolean }}
-        """
-        
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
-        )
-        
-        return json.loads(completion.choices[0].message.content)
-    except Exception as e:
-        logger.error(f"Grounding check failed: {e}")
-        return {"score": 0.0, "analysis": f"Check failed: {e}", "supported": False}

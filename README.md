@@ -44,7 +44,10 @@ graph TD
             MCPServers --> APIs[[Gmail/Drive/Calendar/Jira]]
         end
         
-        ToolCall -- "Output Context" --> UpdateContext["Context Accumulator"]
+        ToolCall -- "Output Context" --> Grounding{"Grounding Check"}
+        Grounding -- "Pass > 0.70" --> UpdateContext["Context Accumulator"]
+        Grounding -- "Fail < 0.70" --> Fallback["Fallback Response"]
+        Fallback --> UpdateContext
         UpdateContext --> StepLoop
         StepLoop -- "Task Complete" --> Synth["Synthesis Agent"]
     end
@@ -84,6 +87,12 @@ Safety is paramount in agentic systems. The executor implements a robust **Confi
 - **Streaming Status**: Real-time feedback on what the agents are doing ("Step 1: SQL Agent working...").
 - **Deterministic Passing**: Explicit data passing between steps ensures accuracy and prevents "hallucinated actions".
 
+### 5. 🧠 Deterministic Grounding Check
+To prevent hallucinations in RAG responses (e.g., meeting summaries), the system implements a **Vector Similarity Guardrail**:
+- **Embedding-Based Verification**: Calculates the cosine similarity between the generated response and the retrieved context chunks using `google-genai` embeddings.
+- **Threshold Enforcement**: If the similarity score drops below **0.70**, the system automatically falls back to a "Not enough info" response, ensuring high reliability.
+- **Observability**: Grounding scores are logged for every RAG interaction.
+
 ---
 
 ## � Common Application Use Cases
@@ -115,6 +124,7 @@ Safety is paramount in agentic systems. The executor implements a robust **Confi
 - **Language Models**: Google Gemini (1.5 Flash / 1.5 Pro).
 - **Backend**: FastAPI with Server-Sent Events (SSE) for streaming.
 - **Vector DB**: Pinecone (for meeting context retrieval).
+- **Embeddings**: `google-genai` and `numpy` for high-performance vector operations.
 - **Database**: MySQL (for business data).
 - **Observability**: [Langfuse](https://langfuse.com/) - For tracing agent steps, monitoring latency, and debugging LLM calls.
 
@@ -162,6 +172,7 @@ The project includes a robust evaluation pipeline using **RAGAS** (Retrieval Aug
    GOOGLE_OAUTH_CLIENT_SECRET=...
    JIRA_URL=https://your-jira-domain.com
    JIRA_PAT=your_personal_access_token
+   PINECONE_MODEL=text-embedding-004  # or gemini-embedding-001
    ```
 
 4. **Initialize MCP Servers**:

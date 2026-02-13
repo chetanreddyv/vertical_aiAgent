@@ -714,11 +714,6 @@ class ChatApp {
                     <p>The agent wants to execute the following step:</p>
                     <textarea id="${formId}-instruction" class="confirmation-input">${data.instruction}</textarea>
                     
-                    ${data.inputs && Object.keys(data.inputs).length > 0 ? `<div class="inputs-preview">
-                        <strong>Inputs</strong>
-                        <pre>${JSON.stringify(data.inputs, null, 2)}</pre>
-                    </div>` : ''}
-                    
                     <div class="confirmation-actions">
                         <button class="btn-cancel" id="${formId}-cancel">Cancel</button>
                         <button class="btn-confirm" id="${formId}-confirm">Confirm & Resume</button>

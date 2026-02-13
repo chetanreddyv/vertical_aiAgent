@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from pinecone import Pinecone
 from google import genai
 from google.genai import types
-from sentence_transformers import CrossEncoder # Keep CrossEncoder for reranking
+import cohere
 from datetime import datetime, timezone
 import json
 from dateutil import parser as date_parser
@@ -31,6 +31,9 @@ index = pc.Index(index_name, host=index_host) if index_host else pc.Index(index_
 
 # Initialize Gemini
 genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Initialize Cohere
+cohere_client = cohere.Client(api_key=os.getenv("COHERE_API"))
 
 def get_embedding(text: str) -> List[float]:
     """Generate embedding using Google Gemini model via new google-genai SDK."""
@@ -221,16 +224,20 @@ def _execute_rag_search(
 
         # 4. RERANKING STEP
         if candidates:
-            # Re-ranker model (Lazy loaded)
-            reranker_model_name = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-            reranker = CrossEncoder(reranker_model_name)
-            
+            # Use Cohere reranker API
             passages = [c["content"] for c in candidates]
-            query_passage_pairs = [[query, p] for p in passages]
-            rerank_scores = reranker.predict(query_passage_pairs)
             
-            for i, candidate in enumerate(candidates):
-                candidate["relevance_score"] = float(rerank_scores[i])
+            # Call Cohere rerank API
+            rerank_response = cohere_client.rerank(
+                query=query,
+                documents=passages,
+                model="rerank-english-v3.0",
+                top_n=len(passages)  # Get scores for all candidates
+            )
+            
+            # Map reranked results back to candidates
+            for result in rerank_response.results:
+                candidates[result.index]["relevance_score"] = float(result.relevance_score)
                 
             # Sort by RERANKER score
             candidates.sort(key=lambda x: x["relevance_score"], reverse=True)

@@ -16,6 +16,7 @@ google-genai
 pinecone
 sentence-transformers
 numpy
+cohere
 
 ragas
 datasets

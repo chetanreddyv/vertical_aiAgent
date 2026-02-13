@@ -7,7 +7,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from dotenv import load_dotenv
 import os
 import io
-import re
+
 import asyncio
 import zipfile
 import xml.etree.ElementTree as ET

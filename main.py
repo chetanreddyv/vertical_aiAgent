@@ -19,7 +19,6 @@ import agents
 
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
     tldv_agent, jira_agent, general_agent, mysql_mcp, calendar_mcp, 
     drive_mcp, rag_mcp, jira_mcp, AgentSelection
 )

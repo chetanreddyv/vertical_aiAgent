@@ -1,6 +1,6 @@
-pydantic_ai 
+pydantic_ai
 openai
-uv 
+uv
 fastmcp
 pymysql
 python-dotenv
@@ -11,19 +11,8 @@ google-auth-httplib2
 google-api-python-client
 uvicorn
 google-genai
-# google-generativeai (deprecated)
-# notecard
 pinecone
-sentence-transformers
-numpy
 cohere
-
-ragas
-datasets
-langchain-google-genai
-
-langchain-community
-rapidfuzz
 langfuse
 jira
 python-dateutil

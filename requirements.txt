@@ -15,3 +15,6 @@ langfuse
 jira
 python-dateutil
 numpy
+slack-bolt
+slack-sdk
+aiohttp

@@ -149,6 +149,16 @@ jira_mcp = MCPServerStdio(
     }
 )
 
+# Custom Jira MCP
+jira_mcp = MCPServerStdio(
+    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    args=["mcp_servers/jira_server.py"],
+    env={
+        "JIRA_PAT": os.getenv("JIRA_PAT", ""),
+        "JIRA_URL": os.getenv("JIRA_URL", ""),
+    }
+)
+
 
 manager_agent = Agent(
     "google-gla:gemini-3-flash-preview",
@@ -301,6 +311,25 @@ tldv_agent = Agent(
         "- For FUTURE meetings (scheduling, invites) → defer to Calendar agent\n"
     ),
     mcp_servers=[rag_mcp]
+)
+
+jira_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    system_prompt=(
+        "You are a Jira project management assistant.\n\n"
+        "Capabilities:\n"
+        "- Search for issues using JQL or natural language\n"
+        "- Create new issues (Tasks, Bugs, Stories) in specific projects\n"
+        "- Update existing issues (status, assignee, priority)\n"
+        "- Add comments to issues\n"
+        "- Get detailed issue information\n\n"
+        "Guidelines:\n"
+        "- When creating issues, ask for project key if not provided (default to 'PROJ' if necessary but prefer asking)\n"
+        "- Use clear summaries and descriptions\n"
+        "- When searching, provide key details: Key, Summary, Status, Assignee, Priority\n"
+        "- CRITICAL: If asked to update an issue, FIRST search for it to confirm the Key.\n"
+    ),
+    mcp_servers=[jira_mcp]
 )
 
 jira_agent = Agent(

@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Optional, Literal
 from dataclasses import dataclass
 import os
+import sys
 import logging
 import time
 from dotenv import load_dotenv
@@ -80,7 +81,7 @@ class CitableResult(BaseModel):
 
 # MySQL
 mysql_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/sql_server.py"],
     env={
         "DB_HOST": os.getenv("DB_HOST", "localhost"),
@@ -95,7 +96,7 @@ mysql_mcp = MCPServerStdio(
 
 # Custom Email MCP
 email_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/email_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -105,7 +106,7 @@ email_mcp = MCPServerStdio(
 
 # Custom Calendar MCP
 calendar_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/calendar_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -115,7 +116,7 @@ calendar_mcp = MCPServerStdio(
 
 # Custom Drive MCP
 drive_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/drive_server.py"],
     env={
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
@@ -126,7 +127,7 @@ drive_mcp = MCPServerStdio(
 
 # RAG MCP (Pinecone)
 rag_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/rag_server.py"],
     env={
         "PINECONE_API_KEY": os.getenv("PINECONE_API_KEY", ""),
@@ -142,7 +143,7 @@ rag_mcp = MCPServerStdio(
 
 # Custom Jira MCP
 jira_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
+    sys.executable,
     args=["mcp_servers/jira_server.py"],
     env={
         "JIRA_PAT": os.getenv("JIRA_PAT", ""),

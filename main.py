@@ -19,7 +19,7 @@ import agents
 
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    jira_agent, general_agent, mysql_mcp, calendar_mcp, 
+    jira_agent, general_agent, synthesizer_agent, mysql_mcp, calendar_mcp, 
     drive_mcp, rag_mcp, jira_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
@@ -86,7 +86,8 @@ def get_agent_by_name(name: str):
         "drive": drive_agent,
         "calendar": calendar_agent,
         "jira": jira_agent,
-        "general": general_agent
+        "general": general_agent,
+        "synthesizer": synthesizer_agent
     }
     return agents_map.get(name, general_agent)
 
@@ -127,7 +128,8 @@ async def lifespan(app: FastAPI):
             "drive": drive_agent,
             "calendar": calendar_agent,
             "jira": jira_agent,
-            "general": general_agent
+            "general": general_agent,
+            "synthesizer": synthesizer_agent
         }
         plan_executor = PlanExecutor(agents_map)
         logger.info("✅ PlanExecutor initialized")

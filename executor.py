@@ -291,9 +291,9 @@ class PlanExecutor:
             
         final_context += f"\n\nInstruction: {plan.final_response_instruction}"
         
-        # Use general agent for synthesis
-        general_agent = self.agents_map.get("general")
-        final_result = await general_agent.run(final_context)
+        # Use synthesizer agent for synthesis
+        synthesizer = self.agents_map.get("synthesizer")
+        final_result = await synthesizer.run(final_context)
         
         output_obj = final_result.output
         if hasattr(output_obj, 'answer') and hasattr(output_obj, 'sources'):

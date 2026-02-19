@@ -399,6 +399,18 @@ general_agent = Agent(
     mcp_servers=[rag_mcp]
 )
 
+synthesizer_agent = Agent(
+    "google-gla:gemini-3-flash-preview",
+    system_prompt=(
+        "You are a precise synthesis assistant. Your ONLY job is to take the execution results from other agents and format them into a clear, cohesive final response.\n\n"
+        "## Synthesis Guidelines\n"
+        "1. Focus ONLY on the factual content provided in the `Execution Results`.\n"
+        "2. **SOURCES & CITATIONS**: If provided with 'Verified Sources':\n"
+        "   - Include a 'Sources & Citations' section at the end of your response.\n"
+        "   - Do not hallucinate sources; only use the ones explicitly provided."
+    )
+)
+
 @observe()
 async def initialize_agents() -> SqlDeps:
     """Initialize agents and return SQL dependencies for dependency injection."""

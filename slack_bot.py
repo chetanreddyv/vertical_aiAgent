@@ -46,14 +46,14 @@ app = AsyncApp(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def call_agent_stream(query: str) -> dict:
+async def call_agent_stream(query: str, session_id: str = "default") -> dict:
     """
     Call the FastAPI /query-stream endpoint and collect the final result.
     Returns the result data dict from the 'result' event.
     """
     url = f"{API_BASE_URL}/query-stream"
     auth = aiohttp.BasicAuth(API_USERNAME, API_PASSWORD)
-    params = {"query": query}
+    params = {"query": query, "session_id": session_id}
 
     result_data = {"response": "Sorry, I couldn't get a response.", "success": False}
 
@@ -147,7 +147,7 @@ async def handle_mention(event, say, logger):
     thinking_ts = await post_thinking(say, channel, thread_ts)
 
     try:
-        result = await call_agent_stream(query)
+        result = await call_agent_stream(query, session_id=thread_ts)
         response_text = format_response_for_slack(result.get("response", "No response."))
     except Exception as e:
         logger.error(f"Error calling agent: {e}", exc_info=True)
@@ -167,6 +167,7 @@ async def handle_dm(event, say, logger):
         return
 
     channel = event["channel"]
+    thread_ts = event.get("thread_ts") or event.get("ts")
     query = event.get("text", "").strip()
 
     if not query:
@@ -178,7 +179,7 @@ async def handle_dm(event, say, logger):
     thinking_ts = await post_thinking(say, channel, thread_ts=None)
 
     try:
-        result = await call_agent_stream(query)
+        result = await call_agent_stream(query, session_id=thread_ts)
         response_text = format_response_for_slack(result.get("response", "No response."))
     except Exception as e:
         logger.error(f"Error calling agent: {e}", exc_info=True)

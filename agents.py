@@ -47,7 +47,6 @@ class AgentSelection(str, Enum):
     SQL = "sql"
     DRIVE = "drive"
     CALENDAR = "calendar"
-    TLDV = "tldv"
     JIRA = "jira"
     GENERAL = "general"
 
@@ -139,15 +138,7 @@ rag_mcp = MCPServerStdio(
     timeout=120,
 )
 
-# Custom Jira MCP
-jira_mcp = MCPServerStdio(
-    "/Users/chetan/Documents/GitHub/vertical_aiAgent/.venv/bin/python3",
-    args=["mcp_servers/jira_server.py"],
-    env={
-        "JIRA_PAT": os.getenv("JIRA_PAT", ""),
-        "JIRA_URL": os.getenv("JIRA_URL", ""),
-    }
-)
+
 
 # Custom Jira MCP
 jira_mcp = MCPServerStdio(
@@ -167,22 +158,20 @@ manager_agent = Agent(
         "You are the Manager Agent, an intelligent orchestrator for a multi-agent system.\n"
         "Your goal is to break down user requests into a sequence of actionable steps executed by specialist agents.\n\n"
         "AVAILABLE AGENTS:\n"
-        "- 'tldv': SOURCE OF TRUTH for PAST meetings. Use for transcripts, summaries, 'what did X say', 'meeting from last week'.\n"
-        "   - Capabilities: Advanced hybrid search with date/speaker/similarity filtering.\n"
-        "   - IMPORTANT: Extract temporal context (dates, 'last week') and speaker names from user queries.\n"
-        "   - Pass contextual hints in instructions (e.g., 'Search for budget discussions from last week').\n"
+        "- 'general': SOURCE OF TRUTH for all organizational knowledge (PAST meetings, transcripts, what was said, AND Drive documents). Also handles simple conversational queries.\n"
+        "   - Capabilities: Advanced search for documents and meeting transcripts.\n"
+        "   - IMPORTANT: Extract temporal context (dates, 'last week') and pass contextual hints in instructions (e.g., 'Search for budget documents from last week').\n"
         "- 'calendar': Future scheduling, availability, and specific event metadata (time/location/participants).\n"
         "   - Capabilities: Create/Update events, Check availability.\n"
         "- 'email': Sending and reading emails (Gmail). to send emails \n"
         "- 'sql': Querying the business database (Salesforce data).\n"
-        "- 'drive': File management (Drive) and retrieving knowledge from stored documents (PDFs, reports, etc).\n"
+        "- 'drive': File management and actions on Drive (Create folders, list files, upload, download). DO NOT use for knowledge retrieval (use 'general' for that).\n"
         "- 'jira': Project management, issue tracking, and software development tasks.\n"
-        "   - Capabilities: Create/Update issues, Add comments, Transition status, Search issues.\n"
-        "- 'general': Simple conversational, or reply with 'I can't help with that' whenever the question is not related to the above agents.\n\n"
+        "   - Capabilities: Create/Update issues, Add comments, Transition status, Search issues.\n\n"
         "RULES:\n"
         "1. ANALYZE context: You have access to the full conversation history. Resolve references like 'that meeting' or 'the file' based on previous turns.\n"
         "2. CHAIN steps: If a task requires output from one agent to be used by another (e.g., 'email the meeting summary'), create sequential steps.\n"
-        "   - Step s1: tldv ('Summarize the meeting...')\n"
+        "   - Step s1: general ('Summarize the meeting...')\n"
         "   - Step s2: email ('Send an email...')\n"
         "     - depends_on: ['s1']\n"
         "     - inputs: {'body': '{{steps.s1.output}}'}\n"
@@ -195,8 +184,8 @@ manager_agent = Agent(
         "5. CLARIFYING QUESTIONS:\n"
         "   - If the user's request is too vague to form a plan (e.g., 'Send an email' without recipient or subject), DO NOT create steps.\n"
         "   - Instead, populate `clarifying_questions` with 1-2 specific questions to ask the user.\n"
-        "6. TLDV vs CALENDAR: \n"
-        "   - If the user asks about CONTENT (what was said, summaries, topics) -> TLDV.\n"
+        "6. GENERAL vs CALENDAR:\n"
+        "   - If the user asks about CONTENT (what was said, summaries, topics) -> GENERAL.\n"
         "   - If the user asks about LOGISTICS (when is it, invite who) -> CALENDAR.\n"
     )
 )
@@ -220,31 +209,19 @@ email_agent = Agent(
 
 drive_agent = Agent(
     "google-gla:gemini-3-flash-preview",
-    output_type=CitableResult,
     system_prompt=(
-        "You are a Google Drive file management and knowledge assistant.\n\n"
+        "You are a Google Drive file management assistant.\n\n"
         "Capabilities:\n"
-        "- Search and retrieve knowledge from stored documents (PDFs, Docs, Text) using 'search_documents'\n"
         "- Search files/folders metadata (listing) using natural language or Drive query syntax via 'search_files'\n"
         "- Read content of specific files if you have the ID\n"
         "- Upload, download, create folders\n"
         "- Get file metadata\n\n"
         "Guidelines:\n"
-        "- **Content vs. Files**:\n"
-        "  - If the user asks about *information inside* documents (e.g., 'What does the budget report say?', 'Find info about project X'), use `search_documents`. This uses semantic search over the knowledge base.\n"
-        "  - If the user asks for *files themselves* (e.g., 'List my PDF files', 'Find the file named report.pdf'), use `search_files` (Drive API).\n"
-        "- **RAG Search (`search_documents`)**:\n"
-        "  - Use this for open-ended questions about knowledge.\n"
-        "  - Results include 'citation_label' and snippets.\n"
-        "- **Citations**:\n"
-        "  - Populate the `sources` field in your output with the `citation_label` of every document used.\n"
-        "  - Do not include citations in the `answer` text; keep them in the `sources` list.\n"
-        "- **Drive Management**:\n"
-        "  - Provide clear file listings with names, types, and sizes.\n"
-        "  - Report upload/download progress.\n"
-        "- CRITICAL: Do not confuse `search_documents` (content/knowledge) with `search_files` (file system/metadata).\n"
+        "- You ONLY perform file actions. If asked for knowledge from documents, the Manager should have routed it to the General agent.\n"
+        "- Provide clear file listings with names, types, and sizes.\n"
+        "- Report upload/download progress.\n"
     ),
-    mcp_servers=[rag_mcp, drive_mcp]
+    mcp_servers=[drive_mcp]
 )
 
 calendar_agent = Agent(
@@ -332,24 +309,7 @@ jira_agent = Agent(
     mcp_servers=[jira_mcp]
 )
 
-jira_agent = Agent(
-    "google-gla:gemini-3-flash-preview",
-    system_prompt=(
-        "You are a Jira project management assistant.\n\n"
-        "Capabilities:\n"
-        "- Search for issues using JQL or natural language\n"
-        "- Create new issues (Tasks, Bugs, Stories) in specific projects\n"
-        "- Update existing issues (status, assignee, priority)\n"
-        "- Add comments to issues\n"
-        "- Get detailed issue information\n\n"
-        "Guidelines:\n"
-        "- When creating issues, ask for project key if not provided (default to 'PROJ' if necessary but prefer asking)\n"
-        "- Use clear summaries and descriptions\n"
-        "- When searching, provide key details: Key, Summary, Status, Assignee, Priority\n"
-        "- CRITICAL: If asked to update an issue, FIRST search for it to confirm the Key.\n"
-    ),
-    mcp_servers=[jira_mcp]
-)
+
 
 sql_agent = Agent(
     "google-gla:gemini-3-flash-preview",
@@ -417,23 +377,26 @@ You must return a structured JSON object with these fields:
 
 general_agent = Agent(
     "google-gla:gemini-3-flash-preview",
+    output_type=CitableResult,
     system_prompt=(
-        "You are a helpful, knowledgeable AI assistant.\n\n"
-        "When answering questions:\n"
-        "- Provide accurate, concise information\n"
-        "- Use examples when helpful\n"
-        "- Admit when you don't know something\n"
-        "- Be conversational and friendly\n\n"
-        "## Synthesis Guidelines\n"
-        "When you are synthesizing results from other agents:\n"
-        "1. Focus on the factual content provided in the `Execution Results`.\n"
-        "2. **SOURCES & CITATIONS**: You will be provided with a list of 'Verified Sources'.\n"
-        "   - You MUST include a 'Sources & Citations' section at the end of your response.\n"
-        "   - List all verified sources provided to you in a clean markdown list.\n"
-        "   - Do not hallucinate sources; only use the ones explicitly provided.\n\n"
-        "Note: You don't have access to external tools for general queries. "
-        "Inform users if they need specific functionality like email or database access."
-    )
+        "You are a helpful, knowledgeable AI assistant and the primary source of truth for the organization.\n\n"
+        "Capabilities:\n"
+        "- Answer general questions conversationally.\n"
+        "- Search across all past meeting transcripts using semantic vector search ('search_meetings').\n"
+        "- Search across all Drive documents (PDFs, Docs, Text) in the knowledge base ('search_documents').\n"
+        "- Synthesize information from other agents when provided.\n\n"
+        "Guidelines:\n"
+        "1. **RAG Search Usage**:\n"
+        "   - For meetings: Use 'search_meetings'. Filter by date/speaker when possible.\n"
+        "   - For documents: Use 'search_documents'.\n"
+        "   - Interpret results carefully. Use metadata to add context (date, speakers, titles).\n"
+        "2. **Sources & Citations**:\n"
+        "   - Populate the `sources` field in your output with the `citation_label` of every document/meeting used, or from the 'Verified Sources' list provided in the prompt.\n"
+        "   - Do not hallucinate sources. Do not put citations inline in the answer text, just list them in the `sources` list.\n\n"
+        "3. **Synthesis**:\n"
+        "   - If you are provided with `Execution Results` from other agents, focus on that factual content to answer."
+    ),
+    mcp_servers=[rag_mcp]
 )
 
 @observe()

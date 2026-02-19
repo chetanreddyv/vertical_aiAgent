@@ -295,11 +295,19 @@ class PlanExecutor:
         general_agent = self.agents_map.get("general")
         final_result = await general_agent.run(final_context)
         
+        output_obj = final_result.output
+        if hasattr(output_obj, 'answer') and hasattr(output_obj, 'sources'):
+            resp_str = output_obj.answer
+            if output_obj.sources:
+                resp_str += "\n\n**Sources:**\n- " + "\n- ".join(output_obj.sources)
+        else:
+            resp_str = str(output_obj)
+            
         yield {
             "type": "result",
             "data": {
                 "success": True,
-                "response": str(final_result.output),
+                "response": resp_str,
                 "sql_data": self.sql_data,
                 "step_outputs": self.step_outputs
             }

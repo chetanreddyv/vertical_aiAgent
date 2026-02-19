@@ -15,7 +15,21 @@ class ChatApp {
         this.loginForm = document.getElementById('loginForm');
         this.logoutBtn = document.getElementById('logoutBtn');
 
+        // Session State
+        this.sessionId = localStorage.getItem('agent_session_id');
+        if (!this.sessionId) {
+            this.sessionId = this.generateUUID();
+            localStorage.setItem('agent_session_id', this.sessionId);
+        }
+
         this.init();
+    }
+
+    generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 
     init() {
@@ -221,7 +235,8 @@ class ChatApp {
 
         try {
             // Use fetch for streaming to better control the flow and allow POST updates later if needed
-            const response = await fetch(`${API_URL}/query-stream?query=${encodeURIComponent(query)}`, {
+            const url = `${API_URL}/query-stream?query=${encodeURIComponent(query)}&session_id=${encodeURIComponent(this.sessionId)}`;
+            const response = await fetch(url, {
                 headers: { 'Authorization': this.auth }
             });
 
@@ -667,6 +682,10 @@ class ChatApp {
             // Call backend to clear history
             await this.clearHistory();
 
+            // Generate new session ID for a fresh start
+            this.sessionId = this.generateUUID();
+            localStorage.setItem('agent_session_id', this.sessionId);
+
             // Remove all existing messages
             const messages = this.messagesContainer.querySelectorAll('.message');
             messages.forEach(msg => msg.remove());
@@ -685,7 +704,8 @@ class ChatApp {
 
     async clearHistory() {
         try {
-            const response = await fetch(`${API_URL}/reset-history`, {
+            const url = `${API_URL}/reset-history?session_id=${encodeURIComponent(this.sessionId)}`;
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Authorization': this.auth }
             });

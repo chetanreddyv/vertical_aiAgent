@@ -19,7 +19,7 @@ import agents
 
 from agents import (
     manager_agent, email_agent, sql_agent, drive_agent, calendar_agent, 
-    tldv_agent, jira_agent, general_agent, mysql_mcp, calendar_mcp, 
+    jira_agent, general_agent, mysql_mcp, calendar_mcp, 
     drive_mcp, rag_mcp, jira_mcp, AgentSelection
 )
 from utils import format_query_results, get_temporal_context
@@ -37,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global dependencies
-conversation_history = []
+sessions: Dict[str, list] = {}
 sql_deps: Optional['SqlDeps'] = None  # Will be initialized on startup
 plan_executor: Optional[PlanExecutor] = None
 
@@ -85,7 +85,6 @@ def get_agent_by_name(name: str):
         "sql": sql_agent,
         "drive": drive_agent,
         "calendar": calendar_agent,
-        "tldv": tldv_agent,
         "jira": jira_agent,
         "general": general_agent
     }
@@ -103,7 +102,7 @@ async def lifespan(app: FastAPI):
         sql_agent.run_mcp_servers(),
         calendar_agent.run_mcp_servers(),
         drive_agent.run_mcp_servers(),
-        tldv_agent.run_mcp_servers(),
+        general_agent.run_mcp_servers(),
         jira_agent.run_mcp_servers()
     ):
         # Initialize agents (load schema, create dependencies)
@@ -127,7 +126,6 @@ async def lifespan(app: FastAPI):
             "sql": sql_agent,
             "drive": drive_agent,
             "calendar": calendar_agent,
-            "tldv": tldv_agent,
             "jira": jira_agent,
             "general": general_agent
         }
@@ -190,7 +188,7 @@ async def root():
     return {
         "status": "online",
         "service": "AI Agent API",
-        "agents": ["email", "sql", "drive", "calendar", "tldv", "jira", "general"]
+        "agents": ["email", "sql", "drive", "calendar", "jira", "general"]
     }
 
 @app.get("/verify-auth")
@@ -204,16 +202,21 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
     """
     Process a user query through the Manager Agent orchestration system
     """
-    global conversation_history
+    global sessions
     start_time = time.time()
     try:
         user_input = request.query.strip()
         if not user_input:
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
+        session_id = request.session_id or "default"
+        if session_id not in sessions:
+            sessions[session_id] = []
+        history = sessions[session_id]
+        
         status_updates = []
         logger.info(f"--- 📥 START PROCESSING QUERY ---")
-        logger.info(f"Query: '{user_input}'")
+        logger.info(f"Query: '{user_input}' (Session: {session_id})")
         
         status_updates.append("Analyzing your request...")
         
@@ -225,7 +228,7 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
         from agents import manager_agent
         plan_result = await manager_agent.run(
             f"{temporal_context}{user_input}", 
-            message_history=conversation_history
+            message_history=history
         )
         plan = plan_result.output
         manager_duration = time.time() - manager_start
@@ -238,9 +241,9 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
             clarification_response = "I need a bit more information before I can help."
             
             # Update History
-            conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
-            conversation_history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
-            conversation_history = keep_last_n_turns(conversation_history)
+            history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+            history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
+            sessions[session_id] = keep_last_n_turns(history)
 
             return QueryResponse(
                 intent="clarification",
@@ -284,9 +287,9 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
         sql_data = execution_result.get('sql_data')
 
         # 3. Update Universal History
-        conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
-        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
-        conversation_history = keep_last_n_turns(conversation_history)
+        history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+        history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        sessions[session_id] = keep_last_n_turns(history)
 
         total_duration = time.time() - start_time
         logger.info(f"--- 🏁 FINISH PROCESSING QUERY (Total: {total_duration:.2f}s) ---")
@@ -309,18 +312,22 @@ async def process_query(request: QueryRequest, username: str = Depends(check_aut
         )
 
 @observe(capture_output=False)
-async def query_stream_generator(query: str):
+async def query_stream_generator(query: str, session_id: str = "default"):
     """Generate status updates during query processing"""
-    global conversation_history, paused_states
+    global sessions, paused_states
     start_time = time.time()
     try:
         user_input = query.strip()
         if not user_input:
             yield f"data: {json.dumps({'type': 'error', 'error': 'Query cannot be empty'})}\n\n"
             return
+            
+        if session_id not in sessions:
+            sessions[session_id] = []
+        history = sessions[session_id]
         
         logger.info(f"--- 📥 START STREAMING QUERY ---")
-        logger.info(f"Query: '{user_input}'")
+        logger.info(f"Query: '{user_input}' (Session: {session_id})")
             
         yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your request...'})}\n\n"
         
@@ -332,7 +339,7 @@ async def query_stream_generator(query: str):
         from agents import manager_agent
         plan_result = await manager_agent.run(
             f"{temporal_context}{user_input}", 
-            message_history=conversation_history
+            message_history=history
         )
         plan = plan_result.output
         manager_duration = time.time() - manager_start
@@ -355,9 +362,9 @@ async def query_stream_generator(query: str):
              yield f"data: {json.dumps({'type': 'result', 'data': response_data})}\n\n"
              
              # CRITICAL: Update History so context isn't lost
-             conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
-             conversation_history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
-             conversation_history = keep_last_n_turns(conversation_history)
+             history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+             history.append(ModelResponse(parts=[TextPart(content=clarification_response)]))
+             sessions[session_id] = keep_last_n_turns(history)
              return
 
         logger.info(f"Execution Plan: {', '.join([s.agent.value.upper() for s in plan.steps])}")
@@ -368,7 +375,7 @@ async def query_stream_generator(query: str):
         # Send the clean rewritten query to the UI
         yield f"data: {json.dumps({'type': 'rewritten_query', 'content': plan.rewritten_intent})}\n\n" 
         
-        session_id = str(int(time.time())) # Simple session ID generation if not provided
+        # Note: session_id is now passed directly to query_stream_generator
         
         # 2. Execute Plan using Executor
         execution_result = {}
@@ -403,9 +410,9 @@ async def query_stream_generator(query: str):
         sql_data = execution_result.get('sql_data')
         
         # 3. Update History
-        conversation_history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
-        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
-        conversation_history = keep_last_n_turns(conversation_history)
+        history.append(ModelRequest(parts=[UserPromptPart(content=user_input)]))
+        history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        sessions[session_id] = keep_last_n_turns(history)
         
         response_data = {
             "intent": "multi_agent",
@@ -425,7 +432,7 @@ async def query_stream_generator(query: str):
 @observe(capture_output=False)
 async def confirm_step_stream_generator(confirmation: StepConfirmation):
     """Resume execution after confirmation"""
-    global paused_states, conversation_history
+    global paused_states, sessions
     
     session_id = confirmation.session_id
     state = paused_states.get(session_id)
@@ -486,8 +493,9 @@ async def confirm_step_stream_generator(confirmation: StepConfirmation):
         sql_data = execution_result.get('sql_data')
         
         # Update History
-        conversation_history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
-        conversation_history = keep_last_n_turns(conversation_history)
+        history = sessions.get(session_id, [])
+        history.append(ModelResponse(parts=[TextPart(content=final_response_text)]))
+        sessions[session_id] = keep_last_n_turns(history)
         
         response_data = {
             "intent": "multi_agent",
@@ -502,9 +510,9 @@ async def confirm_step_stream_generator(confirmation: StepConfirmation):
         yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
 @app.get("/query-stream")
-async def stream_query(query: str, username: str = Depends(check_auth)):
+async def stream_query(query: str, session_id: str = "default", username: str = Depends(check_auth)):
     return StreamingResponse(
-        query_stream_generator(query),
+        query_stream_generator(query, session_id),
         media_type="text/event-stream"
     )
 
@@ -516,13 +524,15 @@ async def confirm_step(confirmation: StepConfirmation, username: str = Depends(c
     )
 
 @app.post("/reset-history")
-async def reset_history(username: str = Depends(check_auth)):
+async def reset_history(session_id: str = "default", username: str = Depends(check_auth)):
     """Clear conversation history and paused execution states"""
-    global conversation_history, paused_states
-    conversation_history.clear()
-    paused_states.clear()
-    logger.info("🗑️ Conversation history and paused states cleared")
-    return {"status": "success", "message": "History cleared"}
+    global sessions, paused_states
+    if session_id in sessions:
+        sessions[session_id] = []
+    if session_id in paused_states:
+        del paused_states[session_id]
+    logger.info(f"🗑️ Session {session_id} history and paused states cleared")
+    return {"status": "success", "message": f"History cleared for session {session_id}"}
 
 @app.get("/schema")
 async def get_schema():
@@ -547,7 +557,6 @@ async def health_check():
             "sql": "ready",
             "drive": "ready",
             "calendar": "ready",
-            "tldv": "ready",
             "jira": "ready",
             "general": "ready"
         },

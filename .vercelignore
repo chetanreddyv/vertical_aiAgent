@@ -1,7 +1,6 @@
 # Helper files
 .gitignore
 .vercelignore
-requirements.txt
 README.md
 task.md
 todo.md

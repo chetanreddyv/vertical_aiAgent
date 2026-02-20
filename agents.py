@@ -135,6 +135,8 @@ rag_mcp = MCPServerStdio(
         "PINECONE_MODEL": os.getenv("PINECONE_MODEL", "gemini-embedding-001"),
         "PINECONE_HOST": os.getenv("PINECONE_HOST", ""),
         "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", ""),
+        "COHERE_API_KEY": os.getenv("COHERE_API_KEY", ""),
+        "COHERE_API": os.getenv("COHERE_API", ""),
     },
     timeout=120,
 )

@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  api:
+    build: .
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      # Optional: mount token.json if you want OAuth tokens to persist locally
+      - ./token.json:/app/token.json

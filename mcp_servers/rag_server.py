@@ -33,7 +33,8 @@ index = pc.Index(index_name, host=index_host) if index_host else pc.Index(index_
 genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Initialize Cohere
-cohere_client = cohere.Client(api_key=os.getenv("COHERE_API"))
+cohere_api_key = os.getenv("COHERE_API_KEY") or os.getenv("COHERE_API")
+cohere_client = cohere.Client(api_key=cohere_api_key)
 
 def get_embedding(text: str) -> List[float]:
     """Generate embedding using Google Gemini model via new google-genai SDK."""

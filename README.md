@@ -30,7 +30,6 @@ Broad-scoped AI systems often struggle with specialized tasks. **Vertical AI Age
   - [Evaluation Pipeline](#evaluation-pipeline)
 - [API Reference](#-api-reference)
 - [Data Model & Execution Plan](#-data-model--execution-plan)
-- [Grounding & Hallucination Prevention](#-grounding--hallucination-prevention)
 - [Security & Authentication](#-security--authentication)
 - [Getting Started](#-getting-started)
 - [Environment Variables](#-environment-variables)
@@ -92,7 +91,6 @@ graph TD
    - Routes the step to the correct specialist agent.
    - If the step is flagged `requires_confirmation`, pauses for human approval before executing.
    - The specialist agent invokes MCP tools to interact with external services.
-   - For RAG-based responses, a **grounding check** validates the response against retrieved context.
 4. **General Agent** synthesizes all step outputs into a polished final response.
 5. **Response is streamed** back to the frontend via Server-Sent Events (SSE).
 
@@ -123,21 +121,15 @@ Each agent is a domain expert with purpose-built tools via MCP:
 | 💬 **General** | *(none — LLM only)* | Response synthesis and general knowledge questions |
 
 ### 3. 🛡️ Human-in-the-Loop Safety
-- **High-Risk Action Detection**: Steps involving data mutation (sending emails, updating databases, creating Jira tickets) are automatically flagged via `requires_confirmation`.
-- **User Approval UI**: The system pauses execution and renders a confirmation dialog in the frontend.
-- **Modifiability**: Users can edit the agent's proposed action (e.g., rewriting an email draft) before approving it.
-- **Cancel Capability**: Users can cancel any flagged step, providing full control over automated actions.
+-   **High-Risk Action Detection**: Steps involving data mutation (sending emails, updating databases, creating Jira tickets) are automatically flagged via `requires_confirmation`.
+-   **User Approval UI**: The system pauses execution and renders a confirmation dialog in the frontend.
+-   **Modifiability**: Users can edit the agent's proposed action (e.g., rewriting an email draft) before approving it.
+-   **Cancel Capability**: Users can cancel any flagged step, providing full control over automated actions.
 
 ### 4. Transparent Streaming Execution
-- **Server-Sent Events (SSE)**: Real-time feedback on agent progress (step starts, SQL queries generated, status updates).
-- **Step Cards**: Each agent step is rendered as a visual card in the UI showing the agent type and instruction.
-- **Deterministic Data Passing**: Explicit inter-step data passing prevents "hallucinated actions."
-
-### 5. 🧠 Grounding Check (Hallucination Prevention)
-For RAG-based responses (meeting summaries, document searches), the system implements a **Vector Similarity Guardrail**:
-- **Embedding-Based Verification**: Cosine similarity between the generated response and retrieved context chunks using `google-genai` embeddings (`text-embedding-004`).
-- **Threshold**: Similarity score below **0.70** triggers an automatic fallback to "Not enough information" — ensuring high reliability.
-- **Observability**: Grounding scores are logged for every RAG interaction via structured logging.
+-   **Server-Sent Events (SSE)**: Real-time feedback on agent progress (step starts, SQL queries generated, status updates).
+-   **Step Cards**: Each agent step is rendered as a visual card in the UI showing the agent type and instruction.
+-   **Deterministic Data Passing**: Explicit inter-step data passing prevents "hallucinated actions."
 
 ---
 
@@ -184,7 +176,7 @@ For RAG-based responses (meeting summaries, document searches), the system imple
 | **Project Management** | [Jira REST API](https://developer.atlassian.com/cloud/jira/platform/rest/) | Issue tracking, project management |
 | **Observability** | [Langfuse](https://langfuse.com/) | LLM tracing, latency monitoring, cost tracking |
 | **Frontend** | Vanilla HTML/JS + [Tailwind CSS](https://tailwindcss.com/) | Glassmorphic chat interface with real-time streaming |
-| **Embeddings** | `google-genai` (`text-embedding-004`) | Vector embeddings for RAG and grounding checks |
+| **Embeddings** | `google-genai` (`text-embedding-004`) | Vector embeddings for RAG search |
 
 ---
 
@@ -195,7 +187,6 @@ vertical_aiAgent/
 ├── main.py                     # FastAPI app, API endpoints, SSE streaming, auth
 ├── agents.py                   # Agent definitions, system prompts, Pydantic models
 ├── executor.py                 # PlanExecutor — multi-step execution engine
-├── grounding.py                # Embedding-based hallucination prevention
 ├── utils.py                    # Temporal context, schema formatting, result helpers
 ├── auth_google.py              # Google OAuth 2.0 token generation
 ├── sql_context.md              # SQL schema documentation and query patterns
@@ -262,21 +253,8 @@ The execution engine that processes `ExecutionPlan` step by step:
 - **Step Execution**: Routes each step to the correct specialist agent, passing resolved instructions and context.
 - **Confirmation Flow**: Pauses execution when `requires_confirmation` is set, yields a `confirmation_request` event, and resumes from the confirmed step index.
 - **SQL Data Extraction**: Captures SQL query results and structures them as `sql_data` (with `rows`, `columns`, `executed_query`, `executed_explanation`) for rich frontend rendering.
-- **Grounding Check Integration**: For TLDV agent responses, inspects `ToolReturnPart` messages for `search_meetings` / `search_documents` tool calls, extracts retrieved chunks, and runs the grounding check.
 - **Response Synthesis**: After all steps complete, invokes the General Agent with accumulated context and the plan's `final_response_instruction` to produce the final answer.
 - **Event Streaming**: Yields structured events (`status`, `step_start`, `sql_query`, `confirmation_request`, `result`, `error`) for SSE consumption.
-
-#### `grounding.py` — Hallucination Prevention
-Implements the grounding verification layer:
-
-- **`get_embedding(text)`**: Generates 768-dimensional embeddings using `google-genai` (`text-embedding-004` model) with `SEMANTIC_SIMILARITY` task type.
-- **`cosine_similarity(a, b)`**: Numpy-based cosine similarity between two embedding vectors.
-- **`grounding_check(response, contexts, threshold=0.70)`**: 
-  1. Generates embedding for the agent response.
-  2. Generates embeddings for each retrieved context chunk.
-  3. Computes similarity between response and each chunk.
-  4. Returns `True` if `max_similarity >= threshold`, along with score and details.
-- **Fallback Behavior**: When grounding fails, the executor replaces the response with a "not enough information" message.
 
 #### `utils.py` — Utility Functions
 - **`get_temporal_context()`**: Returns formatted current date/time string injected into agent prompts.
@@ -473,25 +451,6 @@ The system operates against a Salesforce-exported MySQL database. The full schem
 `Account`, `Contact`, `Opportunity`, `Session`, `ProgramInstructorAvailability`, `Deliverable`, `Lead`, `Campaign`, `CampaignMember`, `Student`, `SessionAttendance`, `AccountContactRelation`, `AccountHistory`, `ContactHistory`, `LeadHistory`, `OpportunityHistory`, `OpportunityPipelineHistory`, `CommunicationLogEntry`, `DataDictionaryFields`
 
 The SQL agent's system prompt is dynamically enriched with the actual schema at startup (via `initialize_agents()`).
-
----
-
-## 🧠 Grounding & Hallucination Prevention
-
-```mermaid
-flowchart LR
-    A[Agent Response] --> B[Generate Embedding]
-    C[Retrieved Context Chunks] --> D[Generate Embeddings]
-    B --> E[Cosine Similarity]
-    D --> E
-    E -- "score >= 0.70" --> F[✅ Pass — Use Response]
-    E -- "score < 0.70" --> G[❌ Fail — Fallback Response]
-```
-
-- **Model**: `text-embedding-004` via `google-genai` SDK
-- **Task Type**: `SEMANTIC_SIMILARITY`
-- **Threshold**: `0.70` (configurable)
-- **Scope**: Applied to TLDV agent responses where `search_meetings` or `search_documents` tools are invoked
 
 ---
 

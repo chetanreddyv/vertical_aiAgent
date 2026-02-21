@@ -7,7 +7,6 @@ from pydantic_ai import UsageLimits
 import time
 from utils import format_query_results
 from langfuse import observe
-from grounding import check_grounding
 from pydantic_ai.messages import ToolReturnPart
 
 logger = logging.getLogger(__name__)
@@ -151,37 +150,6 @@ class PlanExecutor:
             
             # Check for confirmation requirement
             if step.requires_confirmation:
-                # Check if this step was just confirmed (passed in via confirm_step arg or similar logic?)
-                # Actually, the caller will handle resuming. We just need to stop if we hit a confirmation 
-                # that hasn't been "resolved" (which effectively means we just pause here).
-                # But wait, if we are resuming, we are given the *edited* plan for this step.
-                # So if we are resuming at step i, we assume the caller has already addressed the confirmation 
-                # by potentially modifying the step in the plan passed to this function.
-                # However, we need a way to know if we should pause *now*.
-                # If we are starting at step i (resuming), we proceed. 
-                # If we encounter a *later* step j > i that needs confirmation, we pause there.
-                
-                # Logic: If this is the *first* step we are executing in this run, 
-                # we assume it's approved (or doesn't need approval if start_index=0 and req_conf=False).
-                # If we hit a requires_confirmation step *after* the start, we pause.
-                
-                # Wait, what if the first step needs confirmation? 
-                # The Manager creates the plan. Step 1 has req_conf=True.
-                # We start at index 0. We see req_conf=True. We must PAUSE.
-                # The user confirms. We call execute_plan with start_index=0 again (but with modified plan?).
-                # If we just call it again, we hit the same check.
-                # We need a way to say "treat this step as confirmed".
-                # Simplest way: The '/confirm-step' endpoint will likely *update* the step's requires_confirmation to False
-                # OR we just rely on the fact that if we are resuming, the user explicitly triggered it.
-                
-                # Let's add a `force_execution` set or similar? Or simpler:
-                # If we are resuming (i == start_index) AND the step was the reason we paused, we assume it's go time?
-                # No, that's risky.
-                
-                # Better: The `/confirm-step` logic in main.py will update the `requires_confirmation` flag to False 
-                # in the *copy* of the plan it submits for execution.
-                # So here, we just check the flag. If it's True, we pause.
-                
                 logger.info(f"⚠️ Step {step.id} requires confirmation: {resolved_instruction_for_ui}")
                 yield {
                     "type": "confirmation_request",
@@ -197,42 +165,10 @@ class PlanExecutor:
             try:
                 result = await self.execute_step(step, context, sql_deps)
                 
-                # Capture retrieved chunks for grounding check
-                retrieved_chunks = []
-                # Inspect messages for tool returns
-                # We look for 'search_meetings' or 'search_documents'
-                for msg in reversed(result.new_messages()): # Start from end to get latest
-                     if hasattr(msg, 'parts'):
-                         for part in msg.parts:
-                             if isinstance(part, ToolReturnPart):
-                                 if part.tool_name in ['search_meetings', 'search_documents']:
-                                     # The content is a dict (or parsed to one)
-                                     tool_output = part.content
-                                     if isinstance(tool_output, dict) and tool_output.get('success'):
-                                          retrieved_chunks.extend(tool_output.get('results', []))
-                
                 # Handle structured CitableResult
                 if hasattr(result.output, 'answer') and hasattr(result.output, 'sources'):
                     output_str = result.output.answer
                     
-                    # GROUNDING CHECK
-                    if retrieved_chunks:
-                        grounding_result = check_grounding(output_str, retrieved_chunks)
-                        score = grounding_result.get('score', 0.0)
-                        
-                        logger.info(f"Grounding Score: {score}")
-                        yield {"type": "status", "content": f"Grounding Similarity Score: {score:.2f}"}
-
-                        if score < 0.70:
-                            logger.warning(f"Low grounding score ({score}) for step {step.id}. Replacing response.")
-                            output_str = "I could not find enough information in the retrieved context to answer this question accurately."
-                            # Optionally clear sources or keep them? Plan says keep them.
-                            # We should probably update the result object too if we were passing it on, 
-                            # but here we just update 'output_str' which goes into step_outputs.
-                            
-                            # Also update the CitableResult object in case it's used elsewhere?
-                            result.output.answer = output_str
-
                     if result.output.sources:
                         self.sources.update(result.output.sources)
                 else:

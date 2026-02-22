@@ -50,7 +50,7 @@ def get_jira_client() -> JIRA:
 async def jira_search(
     jql_query: str,
     max_results: int = 50,
-    fields: str = "summary,status,assignee,priority,created,updated",
+    fields: str = "summary,status,assignee,priority,issuetype,created,updated",
     ctx: Context = None
 ) -> List[Dict[str, Any]]:
     """
@@ -81,7 +81,7 @@ async def jira_search(
                 "key": issue.key,
                 "summary": issue.fields.summary,
                 "status": issue.fields.status.name,
-                "type": issue.fields.issuetype.name,
+                "type": getattr(issue.fields.issuetype, 'name', 'Unknown') if getattr(issue.fields, 'issuetype', None) else 'Unknown',
                 "priority": issue.fields.priority.name if issue.fields.priority else None,
                 "assignee": issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
                 "created": str(issue.fields.created),
@@ -123,7 +123,7 @@ async def jira_get_issue(
             "summary": issue.fields.summary,
             "description": issue.fields.description or "",
             "status": issue.fields.status.name,
-            "type": issue.fields.issuetype.name,
+            "type": getattr(issue.fields.issuetype, 'name', 'Unknown') if getattr(issue.fields, 'issuetype', None) else 'Unknown',
             "priority": issue.fields.priority.name if issue.fields.priority else None,
             "assignee": issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
             "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,

@@ -620,6 +620,116 @@ MIT License — See the [LICENSE](LICENSE) file for details.
 
 ---
 
+## 🚀 Phase 2 — Supervisor Architecture Refactor
+
+> [!NOTE]
+> Phase 2 replaces the 3-phase Manager→Executor→Synthesizer pipeline with a simpler, faster **Supervisor Agent** pattern. All existing integrations (MCP servers, Slack bot, frontend) remain unchanged.
+
+### What Changed
+
+| | Phase 1 | Phase 2 |
+|-|---------|---------|
+| **LLM calls per query** | 3+ (plan → execute each step → synthesize) | **1** |
+| **Orchestration** | `manager_agent` → `PlanExecutor` → `synthesizer_agent` | `supervisor_agent` only |
+| **Tool routing** | Structured `ExecutionPlan` with step templating | Direct tool calls |
+| **Execution engine** | `executor.py` (251 lines) | **Deleted** |
+| **HITL** | `requires_confirmation` flag on planned steps | Write tools return confirmation payloads |
+
+### New Architecture
+
+```mermaid
+graph TD
+    User([User Query]) --> Sup["Supervisor Agent (Gemini 2.0 Flash)"]
+
+    subgraph ReadTools["Read Tools (execute immediately)"]
+        Sup --> SK[search_knowledge]
+        Sup --> QD[query_database]
+        Sup --> SE[search_emails]
+        Sup --> SC[search_calendar]
+        Sup --> SD[search_drive]
+        Sup --> SJ[search_jira]
+    end
+
+    subgraph WriteTools["Write Tools (HITL — confirmation required)"]
+        Sup --> EM[send_email]
+        Sup --> CE[create_calendar_event]
+        Sup --> CJ[create_jira_issue]
+        Sup --> UJ[update_jira_issue]
+        Sup --> AJ[add_jira_comment]
+        Sup --> TJ[transition_jira_issue]
+        Sup --> CD[create_drive_folder]
+        Sup --> UD[upload_to_drive]
+    end
+
+    WriteTools -- "Returns confirmation payload" --> HITL[User Approval]
+    HITL -- "POST /confirm-step" --> Exec[execute_confirmed_action]
+    Exec --> MCP[MCP Servers]
+    ReadTools --> MCP
+    MCP --> Final([Final Response])
+```
+
+### How the Supervisor Works
+
+1. **User submits a query** — same as before, via chat UI or API.
+2. **Supervisor Agent** receives the query and calls the right specialist tool(s) directly via function calling — no planning step needed.
+3. **Read tools** execute immediately: `search_knowledge`, `query_database`, `search_emails`, `search_calendar`, `search_drive`, `search_jira`.
+4. **Write tools** (any action that mutates state) return a structured **confirmation payload** instead of executing:
+   ```json
+   { "__confirmation_required__": true, "action": "send_email", "details": {...}, "preview": "..." }
+   ```
+5. **Streaming layer** detects the confirmation marker, pauses, and sends a `confirmation_request` SSE event to the frontend.
+6. **User approves** via the existing confirmation UI — POST to `/confirm-step`.
+7. **`execute_confirmed_action()`** calls the MCP tool directly to perform the action.
+
+### HITL Write Tools
+
+| Tool | MCP Action | Description |
+|------|-----------|-------------|
+| `send_email` | `email_mcp.send_email` | Send Gmail — always pauses for review |
+| `create_calendar_event` | `calendar_mcp.create_event` / `create_meeting` | Create event or Google Meet |
+| `create_jira_issue` | `jira_mcp.jira_create_issue` | Create new Jira issue |
+| `update_jira_issue` | `jira_mcp.jira_update_issue` | Update existing issue fields |
+| `add_jira_comment` | `jira_mcp.jira_add_comment` | Add comment to issue |
+| `transition_jira_issue` | `jira_mcp.jira_transition_issue` | Change issue status |
+| `create_drive_folder` | `drive_mcp.create_folder` | Create Drive folder |
+| `upload_to_drive` | `drive_mcp.upload_file` | Upload file to Drive |
+
+### Updated File Structure
+
+```
+vertical_aiAgent/
+├── main.py          # Simplified: single supervisor_agent.run() call + confirm flow
+├── agents.py        # Supervisor agent with read/write tool definitions
+│                    # execute_confirmed_action() — post-approval MCP executor
+│                    # SupervisorDeps — replaces SqlDeps (broader scope)
+├── executor.py      # ← REMOVED in Phase 2
+└── ...              # All MCP servers, frontend, and Slack bot unchanged
+```
+
+### Updated `agents.py` — Key Additions
+
+- **`supervisor_agent`**: Single `Agent` with 14 registered tools (6 read, 8 write).
+- **`SupervisorDeps`**: Replaces `SqlDeps` — holds SQL schema, business context, approved DBs.
+- **`CONFIRMATION_MARKER`**: Constant `"__confirmation_required__"` used to detect write tool payloads.
+- **`execute_confirmed_action(action, details)`**: Dispatches approved actions to the correct MCP server tool.
+
+### Updated API Behavior (Phase 2)
+
+`/query-stream` SSE events are the same as Phase 1, but with simplified internals:
+
+| Event | Phase 1 source | Phase 2 source |
+|-------|---------------|---------------|
+| `status` | PlanExecutor step loop | supervisor_agent startup |
+| `step_start` | Per-step execution | *(removed — tool calls are atomic)* |
+| `rewritten_query` | Manager agent output | *(removed)* |
+| `confirmation_request` | `requires_confirmation` flag on Step | Write tool returning `__confirmation_required__` |
+| `result` | Synthesizer agent | supervisor_agent final output |
+
+> [!TIP]
+> Multi-step tasks (e.g., "find meeting notes then email a summary") still work — the supervisor chains tool calls within a single LLM run using native function calling, so the context flows naturally without explicit `{{steps.s1.output}}` templating.
+
+---
+
 <p align="center">
   Built with ❤️ using Pydantic AI, FastMCP, and Google Gemini
 </p>

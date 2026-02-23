@@ -2,13 +2,13 @@ from fastmcp import FastMCP
 import os.path
 import datetime
 import uuid
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import os
-from typing import List
+import sys
+import os.path as _osp
+sys.path.insert(0, _osp.dirname(_osp.dirname(_osp.abspath(__file__))))
+from google_auth_helper import get_google_creds
 import logging
 
 # Load environment variables
@@ -21,48 +21,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger("calendar_server")
 
-# If modifying these scopes, delete the file token.json.
-# Using unified scopes for all Google services (managed by auth_google.py)
-SCOPES = [
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/gmail.send',
-]
+from typing import List
+
+# Scopes are managed centrally in google_auth_helper.py
 
 mcp = FastMCP("Google Calendar Server")
 
 WATERMARK = "\n\n-By JerseySTEM Cowork Agent"
 
 def get_calendar_service():
-    """Get authenticated Google Calendar service.
-    
-    Returns the calendar service or raises an error if not authenticated.
-    """
-    creds = None
-    # The file token.json stores the user's access and refresh tokens
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    else:
-        raise Exception(
-            "No authentication found. Please run 'python auth_google.py' first to authenticate."
-        )
-    
-    # If credentials expired, try to refresh
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Save the refreshed credentials
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-        else:
-            raise Exception(
-                "Authentication expired. Please run 'python auth_google.py' again."
-            )
-
-    service = build('calendar', 'v3', credentials=creds)
-    return service
+    """Get authenticated Google Calendar service using shared credentials."""
+    creds = get_google_creds()
+    return build('calendar', 'v3', credentials=creds)
 
 @mcp.tool()
 def list_events(max_results: int = 10) -> str:

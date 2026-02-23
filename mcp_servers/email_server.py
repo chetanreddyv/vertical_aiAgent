@@ -6,9 +6,10 @@ import os.path
 import base64
 from email.mime.text import MIMEText
 from typing import List, Optional, Dict, Any, Tuple
-
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+import sys
+import os.path as _osp
+sys.path.insert(0, _osp.dirname(_osp.dirname(_osp.abspath(__file__))))
+from google_auth_helper import get_google_creds
 from googleapiclient.discovery import build
 
 import logging
@@ -22,14 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("gmail_server")
 
-# Ensure your auth flow (auth_google.py) includes these scopes, then re-auth if needed.
-SCOPES = [
-    "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/gmail.send",
-]
+# Scopes are managed centrally in google_auth_helper.py
 
 mcp = FastMCP("Gmail Server")
 
@@ -37,21 +31,8 @@ WATERMARK = "\n\n-By JerseySTEM Cowork Agent"
 
 
 def get_gmail_service():
-    """Get authenticated Gmail service using token.json."""
-    creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    else:
-        raise Exception("No authentication found. Run 'python auth_google.py' first.")
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            with open("token.json", "w") as token:
-                token.write(creds.to_json())
-        else:
-            raise Exception("Authentication expired. Run 'python auth_google.py' again.")
-
+    """Get authenticated Gmail service using shared credentials."""
+    creds = get_google_creds()
     return build("gmail", "v1", credentials=creds)
 
 

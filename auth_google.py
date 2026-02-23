@@ -59,8 +59,21 @@ print()
 print("✅ Authorization successful!")
 print("✅ Credentials saved to token.json")
 print()
+
+# ── Print base64-encoded token for Azure deployment ───────────────────────────
+import base64
+with open('token.json', 'rb') as f:
+    token_b64 = base64.b64encode(f.read()).decode()
+
+print("=" * 60)
+print("📋 AZURE DEPLOYMENT — Copy this value into Azure secrets")
+print("   Secret name: GOOGLE_TOKEN_JSON")
+print("=" * 60)
+print(token_b64)
+print("=" * 60)
+print()
 print("You can now use all Google Workspace services:")
 print("  • Google Calendar (calendar_server.py)")
 print("  • Google Drive (drive_server.py)")
-print("  • Google Docs (docs_server.py)")
+print("  • Gmail (email_server.py)")
 print("=" * 60)

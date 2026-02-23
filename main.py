@@ -107,11 +107,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# CORS middleware — set ALLOWED_ORIGINS=https://your-domain.com,https://other.com in production
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
